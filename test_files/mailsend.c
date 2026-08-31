@@ -32,6 +32,11 @@
 
 enum { TLS_STARTTLS, TLS_IMPLICIT, TLS_NONE };
 
+/* Vlastni kopie, nezavisla na "verbose" v tlsnet.c - tahle ridi
+ * SMTP-urovnove logovani "C: "/"S: " tady v mailsend.c, zatimco tlsnet.c
+ * ma svou vlastni pro transportni-urovnove hlasky ("*: host -> ip",
+ * "*: TLS verze/sifra"). Synchronizuje se explicitne pres
+ * tlsnet_set_verbose() v main() pri zpracovani "-v". */
 static int verbose  = 0;
 
 static const char b64tab[] =

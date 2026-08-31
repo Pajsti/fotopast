@@ -282,8 +282,9 @@ void tlsnet_connect(const char *host, const char *port)
         tlsnet_die(2, "inicializace generatoru nahod selhala");
 
     if (resolve_ipv4(host, &addr) != 0) {
-        fprintf(stderr, "mailsend: nepodarilo se preložit '%s' (DNS)\n", host);
-        exit(2);
+        char errmsg[300];
+        snprintf(errmsg, sizeof(errmsg), "nepodarilo se preložit '%s' (DNS)", host);
+        tlsnet_die(2, errmsg);
     }
     if (verbose)
         fprintf(stderr, "*: %s -> %s\n", host, inet_ntoa(addr));
@@ -297,10 +298,11 @@ void tlsnet_connect(const char *host, const char *port)
     sa.sin_addr = addr;
 
     if (connect(fd, (struct sockaddr *)&sa, sizeof(sa)) != 0) {
+        char errmsg[300];
         close(fd);
-        fprintf(stderr, "mailsend: connect() na %s:%d selhal: %s\n",
-                host, portnum, strerror(errno));
-        exit(2);
+        snprintf(errmsg, sizeof(errmsg), "connect() na %s:%d selhal: %s",
+                 host, portnum, strerror(errno));
+        tlsnet_die(2, errmsg);
     }
     net_ctx.fd = fd;
 }
@@ -344,11 +346,11 @@ void tlsnet_handshake(const char *host, const char *cafile)
     while ((ret = mbedtls_ssl_handshake(&ssl_ctx)) != 0) {
         if (ret != MBEDTLS_ERR_SSL_WANT_READ &&
             ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
-            char err[128];
+            char err[128], errmsg[200];
             mbedtls_strerror(ret, err, sizeof(err));
-            fprintf(stderr, "mailsend: TLS handshake selhal: %s (-0x%04x)\n",
-                    err, (unsigned)-ret);
-            exit(2);
+            snprintf(errmsg, sizeof(errmsg), "TLS handshake selhal: %s (-0x%04x)",
+                     err, (unsigned)-ret);
+            tlsnet_die(2, errmsg);
         }
     }
     use_tls = 1;
