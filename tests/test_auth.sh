@@ -42,6 +42,18 @@ AUTH_TYPE=TOKEN
 authorize_mail "Paja.Stindl@Seznam.CZ" "HUNTER tajnytoken1 STATUS"
 assert_eq "adresa case-insensitive" "$AUTH_OK" "1"
 
+# --- osirela carka v MAIL_MASTERS + prazdna adresa (bezpecnostni fix) ---
+# Kdyz MAIL_MASTERS konci carkou (typicky preklep pri rucni editaci
+# configu), ",paja.stindl@seznam.cz,," obsahuje substring ",,", ktery by
+# bez explicitni kontroly prazdneho vstupu matchoval i prazdnou adresu.
+MAIL_MASTERS="paja.stindl@seznam.cz,"
+is_mail_master "" && r=1 || r=0
+assert_eq "prazdna adresa s osirelou carkou v MAIL_MASTERS neprojde" "$r" "0"
+
+authorize_mail "" "HUNTER tajnytoken1 STATUS"
+assert_eq "TOKEN: prazdny odesilatel s osirelou carkou neprojde" "$AUTH_OK" "0"
+MAIL_MASTERS="paja.stindl@seznam.cz"
+
 # --- sprava tokenu ---
 load_tokens
 assert_eq "pocet tokenu na zacatku" "$TOKEN_COUNT" "1"
@@ -59,6 +71,15 @@ assert_eq "kratky token odmitnut" "$ADD_TOKEN_RESULT" "TOO_SHORT"
 
 add_token "token s mezerou"
 assert_eq "token s mezerou odmitnut" "$ADD_TOKEN_RESULT" "BAD_CHARS"
+
+# vlozeny newline: $(printf '\n') by se orezal na prazdny retezec, proto
+# skutecny Enter v literalu - viz nl v add_token.
+nl='
+'
+add_token "abcd${nl}efgh1234"
+assert_eq "token s vlozenym newline odmitnut" "$ADD_TOKEN_RESULT" "BAD_CHARS"
+load_tokens
+assert_eq "pocet nezmenen po odmitnutem tokenu s newline" "$TOKEN_COUNT" "2"
 
 is_valid_token "druhytoken2" && r=1 || r=0
 assert_eq "novy token plati" "$r" "1"

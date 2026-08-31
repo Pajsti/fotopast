@@ -63,8 +63,14 @@ is_valid_token() {
 add_token() {
     nt="$1"
 
+    # nl pres skutecny Enter v literalu, ne $(printf '\n') - command
+    # substitution orezava koncove nove radky, takze $(printf '\n') by
+    # se vyhodnotilo na prazdny retezec a pattern *""* by matchoval
+    # cokoli (viz IFS trik v mail.sh/common.sh).
+    nl='
+'
     case "$nt" in
-        *" "*|*"$(printf '\t')"*) ADD_TOKEN_RESULT=BAD_CHARS; return 1 ;;
+        *" "*|*"$(printf '\t')"*|*"$nl"*) ADD_TOKEN_RESULT=BAD_CHARS; return 1 ;;
     esac
     # min. 8 znaku. Busybox nema wc; `case` s osmi otazniky nezavisi ani
     # na ${#var}, ktere neni ve vsech ash buildech spolehlive.
@@ -120,6 +126,7 @@ remove_token() {
 # snizime taky (tr s EXPLICITNIMI rozsahy - POSIX tridy busybox nemusi
 # mit).
 is_mail_master() {
+    [ -n "$1" ] || return 1
     [ -n "$MAIL_MASTERS" ] || return 1
     ml=$(printf '%s' "$MAIL_MASTERS" | tr 'A-Z' 'a-z')
     a=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
