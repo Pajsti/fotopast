@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(& \"C:\\\\Users\\\\P�ja �tindl\\\\.vscode\\\\extensions\\\\anthropic.claude-code-2.1.247-win32-x64\\\\resources\\\\native-binary\\\\claude.exe\" plugin install superpowers@claude-plugins-official)",
+      "WebSearch",
+      "PowerShell($c = \"C:\\\\Users\\\\Pája Štindl\\\\.vscode\\\\extensions\\\\anthropic.claude-code-2.1.247-win32-x64\\\\resources\\\\native-binary\\\\claude.exe\"; & $c plugin install superpowers@claude-plugins-official)"
+    ]
+  }
+}

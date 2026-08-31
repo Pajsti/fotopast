@@ -1,0 +1,55 @@
+# hunter/config.txt - konfigurace Huntera.
+#
+# Tenhle soubor je platny POSIX shell (nacita se primo pres `. config.txt`
+# v lib/common.sh) - format je striktne KLIC=HODNOTA, BEZ MEZER kolem "=",
+# hodnoty s mezerami do uvozovek. Radky s # jsou komentare.
+#
+# Zkopiruj tento soubor na SD kartu jako hunter/config.txt a uprav.
+# config.txt (na rozdil od tohohle .example souboru) by nemel skoncit ve
+# verzovani, protoze obsahuje telefonni cisla a e-mailovou adresu.
+
+# Autorizovana telefonni cisla pro SMS prikazy, oddelena carkami, ve
+# formatu s mezinarodni predvolbou. Prikaz ADD pridava sem.
+MASTERS=+420123456789,+420987654321
+
+# Kvalita odesilanych fotografii. POZOR: v teto verzi se hodnota jen
+# uklada a vraci v odpovedi na SMS - skutecne prekodovani/zmenseni
+# JPEGu pred odeslanim NENI implementovano (viz sms.sh).
+QUALITY=HD
+
+# ON = na kazdy vykonany SMS prikaz prijde potvrzovaci SMS zpet.
+CONFIRM=ON
+
+# --- SMTP ---
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=fotopast@example.com
+SMTP_TO=me@example.com
+# starttls (port 587/25) | implicit (port 465) | none (jen pro test)
+SMTP_TLS=starttls
+
+# Heslo NENI tady - je v hunter/smtp.pass, protoze obsah prikazove radky
+# je videt v `ps`. Vytvor ho takto (na zarizeni, pres telnet):
+#   echo 'tve-aplikacni-heslo' > /tmp/mnt/sdcard/hunter/smtp.pass
+# Gmail i Seznam vyzaduji APLIKACNI heslo, ne heslo do uctu.
+
+# --- Modem / AT port ---
+# ttyUSB2 je hypoteza z rozboru firmwaru: ubia_first drzi ttyUSB0 a
+# ttyUSB1, ttyUSB2 by mel byt volny. NEOVERENO NA ZARIZENI - viz spec
+# sekce 11, bod 1. Over pred prvnim ostrym behem:
+#   hunter/bin/atcmd /dev/ttyUSB2 115200 AT
+AT_PORT=/dev/ttyUSB2
+AT_BAUD=115200
+
+# --- Casovani (vteriny) ---
+# Jak dlouho cekat na novy snimek z aktualniho probuzeni, nez se
+# pokracuje jen s tim, co uz je pripravene.
+SNAP_WAIT=25
+
+# Kolik fotografii nejvyse odeslat za jedno probuzeni (ochrana baterie
+# pri velkem nedodelku).
+MAX_SEND_PER_WAKE=3
+
+# Tvrdy strop celeho behu hunter.sh. Po vyprseni se beh bezpodminecne
+# uklidi a ukonci, i kdyby nic neodeslal.
+RUN_DEADLINE=180

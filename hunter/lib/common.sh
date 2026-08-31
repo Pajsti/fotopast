@@ -1,0 +1,286 @@
+# common.sh - log, atomicke zapisy, zamek, konfigurace, drobne shellove
+# pomocniky. Zdrojuje se z hunter.sh, ne spousti primo.
+#
+# DULEZITE: busybox na zarizeni NEMA awk, sed, cut, sort, uniq, wc, head,
+# tail, expr, tee ani bc (overeno primo v binarce, ne jen podle symlinku
+# v /bin). Cely Hunter proto pouziva jen: case, parametricka expanze
+# ${var#...}/${var%...}, $(( )), read, trap - a z appletu jen grep/fgrep,
+# tr, printf, find, stat, df, dd, date, mkdir, mv, rm, cp, touch, sleep,
+# kill, pidof.
+#
+# DULEZITE (MIPS): SIGSTOP/SIGCONT maji na MIPS JINA cisla nez na
+# x86/ARM. Signaly se proto v celem Hunteru volaji vzdycky JMENEM
+# (kill -STOP, kill -CONT, trap ... INT TERM HUP), nikdy cislem.
+
+# log <text...>
+# Zapise radek do LOG_FILE s casovym razitkem. LOG_FILE musi byt jiz
+# nastaveny volajicim (hunter.sh ho nastavuje pred prvnim pouzitim).
+log() {
+    printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG_FILE"
+}
+
+# rotate_log_if_needed
+# Bez wc/du merime velikost pres `stat -c %s`. Pri prekroceni 1 MB se
+# stary log prepise na log.txt.old (jedna generace zpetne staci - Hunter
+# beh trva sekundy, log neroste rychle).
+rotate_log_if_needed() {
+    [ -f "$LOG_FILE" ] || return 0
+    size=$(stat -c %s "$LOG_FILE" 2>/dev/null)
+    case "$size" in
+        ''|*[!0-9]*) return 0 ;;
+    esac
+    if [ "$size" -gt 1048576 ]; then
+        mv -f "$LOG_FILE" "${LOG_FILE}.old" 2>/dev/null
+    fi
+}
+
+# acquire_lock
+# Zamek pres mkdir (atomicka operace i na FAT/exFAT). Kdyz adresar zamku
+# existuje po vypadku napajeni z minuleho behu, PID v nem uz nebezi
+# (kazdy boot ma nova PID) - takovy zamek se bezpecne prevezme.
+acquire_lock() {
+    lockdir="$STATE_DIR/.lock"
+    if mkdir "$lockdir" 2>/dev/null; then
+        echo $$ > "$lockdir/pid" 2>/dev/null
+        return 0
+    fi
+    if [ -f "$lockdir/pid" ]; then
+        oldpid=$(cat "$lockdir/pid" 2>/dev/null)
+        if [ -n "$oldpid" ] && ! kill -0 "$oldpid" 2>/dev/null; then
+            rm -rf "$lockdir" 2>/dev/null
+            if mkdir "$lockdir" 2>/dev/null; then
+                echo $$ > "$lockdir/pid" 2>/dev/null
+                return 0
+            fi
+        fi
+    fi
+    return 1
+}
+
+release_lock() {
+    rm -rf "$STATE_DIR/.lock" 2>/dev/null
+}
+
+# trim <retezec>
+# Osekne uvodni a koncove mezery/taby. Bez sed - po jednom znaku pres
+# case, ale retezce jsou kratke (SMS max 160 znaku), takze O(n) nevadi.
+trim() {
+    s="$1"
+    # tab pres $(printf) misto literalu v souboru - literalni tabulatory
+    # v tomto zdrojaku se pri prenosu po UART ztraceji (busybox ash je
+    # i uprostred heredocu bere jako doplnovani prikazu, viz spec).
+    tb="$(printf '\t')"
+    while :; do
+        case "$s" in
+            " "*|"$tb"*) s="${s#?}" ;;
+            *) break ;;
+        esac
+    done
+    while :; do
+        case "$s" in
+            *" "|*"$tb") s="${s%?}" ;;
+            *) break ;;
+        esac
+    done
+    printf '%s' "$s"
+}
+
+# normalize_phone <cislo>
+# Odstrani mezery a pomlcky, aby "+420 603 284 430" a "+420603284430"
+# byly totozne pri porovnavani s MASTERS.
+normalize_phone() {
+    printf '%s' "$1" | tr -d ' -'
+}
+
+# atomic_write_file <cesta> <obsah>
+# Zapis pres docasny soubor + sync + mv. Pouziva se pro PREPIS celeho
+# souboru (config.txt) - proste pripojeni radku (sent_list.txt,
+# sms_seen.txt) staci resit `>> soubor; sync`, protoze pripojeni
+# neriskuje ztratu uz existujiciho obsahu, jen posledniho radku.
+atomic_write_file() {
+    path="$1"
+    content="$2"
+    tmp="${path}.tmp.$$"
+    printf '%s' "$content" > "$tmp" || return 1
+    sync
+    mv -f "$tmp" "$path" || return 1
+    sync
+    return 0
+}
+
+# set_config_value <KLIC> <HODNOTA>
+# Prepise (nebo prida) KLIC=HODNOTA v config.txt, ostatni radky beze
+# zmeny. Atomicky pres docasny soubor. `case` pattern matching resi
+# "najdi radek zacinajici na KLIC=" bez sed.
+set_config_value() {
+    key="$1"
+    val="$2"
+    tmp="${CONFIG_FILE}.tmp.$$"
+    found=0
+
+    : > "$tmp"
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            "$key="*)
+                printf '%s=%s\n' "$key" "$val" >> "$tmp"
+                found=1
+                ;;
+            *)
+                printf '%s\n' "$line" >> "$tmp"
+                ;;
+        esac
+    done < "$CONFIG_FILE"
+
+    if [ "$found" = 0 ]; then
+        printf '%s=%s\n' "$key" "$val" >> "$tmp"
+    fi
+
+    sync
+    mv -f "$tmp" "$CONFIG_FILE"
+    sync
+}
+
+# load_config
+# config.txt je platny POSIX shell (KLIC=HODNOTA, komentare #), takze se
+# naimportuje primo pres `.` - zadny vlastni parser netreba. Vyplni
+# chybejici nepovinne klice vychozimi hodnotami.
+load_config() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        log "CHYBA: chybi $CONFIG_FILE, koncim"
+        exit 1
+    fi
+    . "$CONFIG_FILE"
+
+    : "${MASTERS:=}"
+    : "${QUALITY:=HD}"
+    : "${CONFIRM:=ON}"
+    : "${SMTP_TLS:=starttls}"
+    : "${AT_BAUD:=115200}"
+    : "${SNAP_WAIT:=25}"
+    : "${MAX_SEND_PER_WAKE:=3}"
+    : "${RUN_DEADLINE:=180}"
+
+    for req in SMTP_HOST SMTP_PORT SMTP_USER SMTP_TO AT_PORT; do
+        eval "val=\${$req:-}"
+        if [ -z "$val" ]; then
+            log "CHYBA: $req neni nastaveno v $CONFIG_FILE, koncim"
+            exit 1
+        fi
+    done
+}
+
+# wait_for_at_port
+# Pri velmi rychlem probuzeni muze hunter.sh (spousteny primo z ubia_test
+# pri sd_ready) predbehnout USB vycet modemu - /dev/ttyUSB* jeste nemusi
+# existovat, byt o par vterin pozdeji uz ano (overeno na zarizeni
+# 2026-08-31: v logu se stridaji behy, kde AT_PORT existuje, a behy s
+# "No such file or directory"). Kratke omezene cekani (max ~5 s), pak
+# pokracujeme tak ci onak - kazda AT-zavisla funkce uz sama degraduje na
+# N/A, kdyz port porad neni.
+wait_for_at_port() {
+    i=0
+    while [ ! -c "$AT_PORT" ] && [ "$i" -lt 5 ]; do
+        sleep 1
+        i=$((i + 1))
+    done
+    if [ ! -c "$AT_PORT" ]; then
+        log "wait_for_at_port: $AT_PORT porad neexistuje po ${i}s cekani"
+    fi
+}
+
+# sync_clock_from_modem
+# Zarizeni nema baterii zalohovany RTC a mezi probuzenimi nebezi NTP -
+# systemovy cas volne pluje mezi boothy (overeno na zarizeni 2026-08-31:
+# rozdil pres 10 hodin oproti modemu, viz spec sekce 2.1). AT+CCLK? vraci
+# cas synchronizovany siti (NITZ). Synchronizujeme jen kdyz je offset
+# presne "+00" (UTC) - jinou hodnotu offsetu jsme na tomto zarizeni nikdy
+# nezmerili, radsi nesahat na hodiny nez hadat aritmetiku casovych pasem.
+sync_clock_from_modem() {
+    resp=$("$HUNTER_DIR/bin/atcmd" "$AT_PORT" "$AT_BAUD" "AT+CCLK?" 5 2>/dev/null)
+
+    line=""
+    old_ifs="$IFS"
+    IFS='
+'
+    for l in $resp; do
+        case "$l" in
+            *+CCLK:*) line="$l" ;;
+        esac
+    done
+    IFS="$old_ifs"
+
+    if [ -z "$line" ]; then
+        log "sync_clock_from_modem: AT+CCLK? bez odpovedi, hodiny nemenim"
+        return 1
+    fi
+
+    # ocekavany tvar: +CCLK: "YY/MM/DD,HH:MM:SS+OO" (overeno na zarizeni
+    # 2026-08-31). Cokoli jineho -> nesahat na hodiny.
+    case "$line" in
+        *'"'[0-9][0-9]/[0-9][0-9]/[0-9][0-9],[0-9][0-9]:[0-9][0-9]:[0-9][0-9][+-][0-9][0-9]'"'*) ;;
+        *)
+            log "sync_clock_from_modem: neocekavany format odpovedi ($line), hodiny nemenim"
+            return 1
+            ;;
+    esac
+
+    body="${line#*\"}"
+    body="${body%\"*}"
+
+    case "$body" in
+        *+*) tzsign="+" ;;
+        *-*) tzsign="-" ;;
+    esac
+    tzq="${body#*[+-]}"
+    datetime="${body%[+-]*}"
+
+    if [ "$tzsign" != "+" ] || [ "$tzq" != "00" ]; then
+        log "sync_clock_from_modem: offset ${tzsign}${tzq} != +00, nechci hadat prevod, hodiny nemenim"
+        return 1
+    fi
+
+    datepart="${datetime%%,*}"
+    timepart="${datetime#*,}"
+    yy="${datepart%%/*}"
+    mdrest="${datepart#*/}"
+    mm="${mdrest%%/*}"
+    dd="${mdrest#*/}"
+    yyyy="20$yy"
+
+    if date -u -s "${yyyy}-${mm}-${dd} ${timepart}" >/dev/null 2>&1; then
+        log "sync_clock_from_modem: hodiny nastaveny na ${yyyy}-${mm}-${dd} ${timepart} UTC (AT+CCLK?)"
+        return 0
+    else
+        log "sync_clock_from_modem: 'date -u -s' selhalo, hodiny nezmeneny"
+        return 1
+    fi
+}
+
+# is_master <cislo>
+# Cislo uz musi byt normalizovane (viz normalize_phone). MASTERS je
+# seznam oddeleny carkami; obalime carkami z obou stran, aby case
+# pattern "*,cislo,*" nezachytil castecnou shodu (napr. "420" uvnitr
+# "1420999").
+is_master() {
+    case ",$MASTERS," in
+        *",$1,"*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# add_master <cislo>
+# Prida cislo do MASTERS (config.txt i aktualni beh), pokud tam jeste
+# neni.
+add_master() {
+    num="$1"
+    if is_master "$num"; then
+        return 0
+    fi
+    if [ -z "$MASTERS" ]; then
+        newval="$num"
+    else
+        newval="$MASTERS,$num"
+    fi
+    set_config_value MASTERS "$newval"
+    MASTERS="$newval"
+}

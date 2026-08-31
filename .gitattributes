@@ -1,0 +1,11 @@
+# Vsechno textove drzime na LF.
+#
+# DULEZITE: bez tohohle by git na Windows (core.autocrlf=true) pri
+# checkoutu prevedl shellove skripty na CRLF. Znak \r na konci radku
+# rozbije busybox ash na zarizeni - stane se soucasti prikazu i
+# argumentu a chyby vypadaji nesmyslne ("command not found: pidof\r").
+* text=auto eol=lf
+
+# Binarky nasazovane na SD kartu - nikdy nesahat.
+hunter/bin/* binary
+pi-tools/uartlog binary

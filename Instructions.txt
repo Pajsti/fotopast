@@ -1,0 +1,170 @@
+Cíl
+
+Vytvořit malou službu Hunter, která bude:
+
+sledovat nově vytvořené fotografie,
+automaticky je odesílat e-mailem,
+umožňovat základní ovládání pomocí SMS,
+poskytovat stav zařízení,
+spravovat fotografie uložené na SD kartě.
+
+Původní funkce fotopasti, cloudová aplikace, PIR senzor a fotografování musí zůstat beze změny.
+
+Prostředí
+
+Zařízení používá embedded Linux s BusyBoxem a má 4G modem.
+
+Fotografie se ukládají na SD kartu do:
+
+/tmp/mnt/sdcard/snaps/
+
+Na zařízení existuje možnost spustit vlastní /config/debug.sh při startu systému. Tento soubor chceme používat pouze jako jednoduchý startovací skript.
+
+Navrhovaná struktura
+/tmp/mnt/sdcard/
+├── snaps/
+└── hunter/
+    ├── hunter.sh
+    ├── state.txt
+    ├── sent_list.txt
+    └── log.txt
+
+debug.sh pouze počká na dostupnost SD karty a následně spustí hunter.sh.
+
+Výhoda je, že hlavní konfigurace a logika zůstávají na SD kartě a lze je snadno upravovat bez změny systémové části zařízení.
+
+Automatické odesílání fotografií
+
+Hunter bude pravidelně kontrolovat:
+
+/tmp/mnt/sdcard/snaps/
+
+Jakmile se objeví nová fotografie, která ještě nebyla zpracována, odešle ji e-mailem.
+
+E-mail bude mít:
+
+Subject:
+
+datum a čas pořízení fotografie
+
+Body:
+
+Battery: xx%
+Signal: xx%
+Space: xx.xxxGB
+
+Fotografie bude přiložena jako příloha.
+
+Odeslané soubory se budou evidovat v:
+
+hunter/sent_list.txt
+
+aby se neposílaly opakovaně.
+
+SMS ovládání
+
+Fotopast má 4G modem a dostupné sériové rozhraní pro jeho řízení.
+
+Chci vytvořit jednoduchý systém příkazů, pomocí kterého bude možné zařízení ovládat SMS zprávami.
+
+SMS se nejprve ověří podle seznamu autorizovaných telefonních čísel.
+
+Konfigurace bude například:
+
+QUALITY=HD
+CONFIRM=ON
+MASTERS=+420123456789,+420987654321
+Příkazy
+FOTO
+STATUS
+QUALITY HD
+QUALITY LOW
+CONFIRM ON
+CONFIRM OFF
+ADD +420...
+WIPE
+
+Význam:
+
+FOTO – požádá zařízení o vytvoření fotografie.
+STATUS – vrátí aktuální stav zařízení.
+QUALITY HD – nastaví kvalitu odesílaných fotografií.
+QUALITY LOW – nastaví nižší kvalitu.
+CONFIRM ON/OFF – zapne/vypne potvrzovací SMS.
+ADD – přidá autorizované telefonní číslo.
+WIPE – odstraní fotografie ze složky určené pro snímky a uvolní místo na SD kartě.
+
+Mazání musí být omezené pouze na fotografie a nesmí zasahovat do systémových souborů nebo databází původní aplikace.
+
+Stav zařízení
+
+STATUS a automatické e-maily by měly zobrazovat:
+
+Battery: xx%
+Signal: xx%
+Space: xx.xxxGB
+
+Volitelně později:
+
+Temperature: xx°C
+PIR: ON/OFF
+
+Důležité je, aby hodnoty byly skutečně získané ze zařízení. Pokud některá hodnota není spolehlivě dostupná, má služba raději uvést N/A než zobrazovat odhadovanou hodnotu.
+
+Modem
+
+Při testování bylo zjištěno, že zařízení poskytuje několik sériových rozhraní /dev/ttyUSB*.
+
+Předchozí testy ukázaly, že:
+
+ttyUSB1 reaguje na AT příkazy,
+ttyUSB2 také reaguje,
+ttyUSB0 pravděpodobně slouží pro datovou komunikaci.
+
+Před implementací SMS je potřeba bezpečně určit, které rozhraní je určeno pro AT komunikaci a zda jeho používání nebude kolidovat s existujícími funkcemi modemu.
+
+Pro zjištění kvality signálu lze ověřit podporu standardního AT příkazu:
+
+AT+CSQ
+E-mail
+
+Cílem je, aby fotopast používala vlastní e-mailovou schránku a odesílala fotografie na předem nastavenou adresu.
+
+Konfigurace by měla podporovat běžné SMTP nastavení:
+
+SMTP server
+SMTP port
+username
+password
+TLS/STARTTLS
+sender
+recipient
+
+Preferované řešení je malé a vhodné pro embedded Linux.
+
+Důležité požadavky
+Neměnit původní fotografování a PIR workflow.
+Hunter má pouze reagovat na výsledné fotografie.
+Zachovat funkčnost původní cloudové aplikace.
+Nepoužívat zbytečně náročné knihovny.
+Po restartu se služba automaticky spustí.
+Konfigurace a logy mají být na SD kartě.
+Při chybě SD karty nesmí zařízení přestat normálně fungovat.
+Každá operace má být co nejvíce odolná proti výpadku napájení.
+Stavový soubor zapisovat atomicky přes dočasný soubor + mv.
+Pokud některou hodnotu neumíme spolehlivě zjistit, použít N/A.
+Aktuální fáze
+
+Zatím nechci psát finální implementaci.
+
+Nejdříve potřebuji systematicky ověřit:
+
+způsob vyvolání fotografie,
+dostupná modemová rozhraní,
+AT+CSQ,
+práci se SMS,
+zdroj hodnoty baterie,
+strukturu souborů s fotografiemi,
+chování původní aplikace při odstranění fotografií.
+
+Teprve po těchto ověřeních navrhneme finální implementaci Hunteru.

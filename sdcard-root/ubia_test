@@ -1,0 +1,13 @@
+#!/bin/sh
+# ubia_test - spousteci hak puvodni aplikace. ubia_first ho spousti sam,
+# presne ve chvili, kdy je SD karta pripravena (tesne pred "touch
+# /tmp/sd_ready" v jeho behu) - viz spec sekce 4.1.
+#
+# Tenhle soubor MUSI zustat v KORENI SD karty, ne ve slozce hunter/ -
+# cesta /tmp/mnt/sdcard/ubia_test je napevno zapsana v binarce
+# ubia_first a nejde zmenit.
+#
+# Presmerovani na log.txt zachyti i vec, ktera by jinak spadla driv, nez
+# se hunter.sh vubec dostane ke svemu vlastnimu logovani (napr. chyba
+# syntaxe po pokazene editaci na karte).
+exec /tmp/mnt/sdcard/hunter/hunter.sh >> /tmp/mnt/sdcard/hunter/log.txt 2>&1

@@ -1,0 +1,22 @@
+# Reálná konfigurace se secrets - commituje se jen config.txt.example
+hunter/config.txt
+hunter/smtp.pass
+
+# Runtime stav a logy (vznikají za běhu, nejsou to zdrojáky)
+hunter/log.txt
+hunter/log.txt.old
+hunter/state/*.txt
+!hunter/state/.gitkeep
+
+# Build artefakty
+test_files/*.o
+test_files/build/
+
+# Tokeny pro e-mailove prikazy (jeden na radek)
+hunter/mail.token
+
+# Vypis firmwaru ze zarizeni - 268 MB, neni to zdrojak
+dump/
+
+# Pracovni adresar subagent-driven-development
+.superpowers/
