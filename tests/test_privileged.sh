@@ -24,6 +24,12 @@ CMD_REPLY=""; execute_command "AUTH TYPE SENDER" 1
 assert_eq "AUTH TYPE s tokenem" "$CMD_REPLY" "AUTH TYPE SET TO SENDER"
 assert_eq "rezim zmenen" "$AUTH_TYPE" "SENDER"
 
+# mirror predchoziho testu pro opacny smer (TOKEN misto SENDER) - obe
+# vetve AUTH TYPE musi kontrolu tokenu vyzadovat nezavisle na sobe.
+CMD_REPLY=""; execute_command "AUTH TYPE TOKEN" 0
+assert_eq "AUTH TYPE TOKEN bez tokenu" "$CMD_REPLY" "TOKEN REQUIRED"
+assert_eq "rezim zustava SENDER" "$AUTH_TYPE" "SENDER"
+
 # --- UTOCNY TEST (vlastni, nad ramec briefu): i v rezimu SENDER musi
 # privilegovany prikaz BEZ tokenu selhat. Tohle je hlavni bezpecnostni
 # pravidlo celeho tasku - execute_command se pri rozhodovani o
@@ -51,6 +57,13 @@ assert_eq "ADD TOKEN bez tokenu nic neprida" "$TOKEN_COUNT" "1"
 CMD_REPLY=""; execute_command "ADD TOKEN novytoken99" 1
 assert_contains "ADD TOKEN s tokenem" "$CMD_REPLY" "TOKEN ADDED"
 assert_not_contains "odpoved neobsahuje hodnotu tokenu" "$CMD_REPLY" "novytoken99"
+
+# mirror "ADD TOKEN bez tokenu" pro REMOVE TOKEN - kontrola tokenu se
+# musi vykonat driv, nez se soubor tokenu vubec otevre.
+CMD_REPLY=""; execute_command "REMOVE TOKEN novytoken99" 0
+assert_eq "REMOVE TOKEN bez tokenu" "$CMD_REPLY" "TOKEN REQUIRED"
+load_tokens
+assert_eq "REMOVE TOKEN bez tokenu nic neodstrani" "$TOKEN_COUNT" "2"
 
 CMD_REPLY=""; execute_command "REMOVE TOKEN novytoken99" 1
 assert_contains "REMOVE TOKEN" "$CMD_REPLY" "TOKEN REMOVED"
