@@ -33,6 +33,33 @@ SMTP_TLS=starttls
 #   echo 'tve-aplikacni-heslo' > /tmp/mnt/sdcard/hunter/smtp.pass
 # Gmail i Seznam vyzaduji APLIKACNI heslo, ne heslo do uctu.
 
+# Tokeny jsou v hunter/mail.token, jeden na radek (viceradkovy soubor -
+# kazdy clovek muze mit vlastni). Vytvor takto na zarizeni:
+#   echo 'nejakytajnytoken' > /tmp/mnt/sdcard/hunter/mail.token
+
+# --- IMAP (prikazovy kanal) ---
+# Prihlasovaci jmeno a heslo se sdili s odesilanim (SMTP_USER,
+# smtp.pass) - je to tentyz ucet.
+IMAP_HOST=imap.seznam.cz
+IMAP_PORT=993
+
+# Autorizovane e-mailove adresy pro prikazy, oddelene carkami.
+# Piste malymi pismeny.
+MAIL_MASTERS=paja.stindl@seznam.cz
+
+# TOKEN  = predmet musi nest platny token A odesilatel musi byt
+#          v MAIL_MASTERS  (vychozi, doporucene)
+# SENDER = staci odesilatel v MAIL_MASTERS
+# POZOR: hlavicku From lze trivialne podvrhnout, takze v rezimu SENDER
+# je i WIPE dosazitelny pro kohokoli, kdo zna dve adresy. Prikazy menici
+# opravneni (AUTH TYPE, ADD, REMOVE, ADD TOKEN, REMOVE TOKEN) vyzaduji
+# token VZDY, i v rezimu SENDER.
+AUTH_TYPE=TOKEN
+
+# Strop poctu fotek na jedno VYZADANI (LAST/DATE/GET). Oddeleny od
+# MAX_SEND_PER_WAKE, protoze o vyzadane fotky si uzivatel rekl vyslovne.
+REQUEST_MAX=5
+
 # --- Modem / AT port ---
 # ttyUSB2 je hypoteza z rozboru firmwaru: ubia_first drzi ttyUSB0 a
 # ttyUSB1, ttyUSB2 by mel byt volny. NEOVERENO NA ZARIZENI - viz spec

@@ -31,6 +31,150 @@
 # to da vyresit cistě shellovym `case`, ktery zadnou externí zavislost
 # nema.
 #
+# --- tokeny ---------------------------------------------------------
+#
+# mail.token je viceradkovy, jeden token na radek. Kazdy clovek ma
+# vlastni token, takze odvolani jednoho neznamena menit token vsem.
+# Vsechny tokeny maji STEJNE opravneni (vedome rozhodnuti, viz spec 3.3).
+#
+# Hodnota tokenu se NIKDY nezaloguje ani nevraci v odpovedi.
+
+# load_tokens -> nastavi TOKEN_COUNT
+load_tokens() {
+    TOKEN_COUNT=0
+    [ -f "$TOKEN_FILE" ] || return 0
+    while IFS= read -r t || [ -n "$t" ]; do
+        [ -n "$t" ] && TOKEN_COUNT=$((TOKEN_COUNT + 1))
+    done < "$TOKEN_FILE"
+    return 0
+}
+
+# is_valid_token <token> -> navratovy kod 0 = plati
+is_valid_token() {
+    [ -n "$1" ] || return 1
+    [ -f "$TOKEN_FILE" ] || return 1
+    while IFS= read -r t || [ -n "$t" ]; do
+        [ "$t" = "$1" ] && return 0
+    done < "$TOKEN_FILE"
+    return 1
+}
+
+# add_token <token> -> ADD_TOKEN_RESULT = OK|EXISTS|TOO_SHORT|BAD_CHARS
+add_token() {
+    nt="$1"
+
+    case "$nt" in
+        *" "*|*"$(printf '\t')"*) ADD_TOKEN_RESULT=BAD_CHARS; return 1 ;;
+    esac
+    # min. 8 znaku. Busybox nema wc; `case` s osmi otazniky nezavisi ani
+    # na ${#var}, ktere neni ve vsech ash buildech spolehlive.
+    case "$nt" in
+        ????????*) ;;
+        *) ADD_TOKEN_RESULT=TOO_SHORT; return 1 ;;
+    esac
+
+    if is_valid_token "$nt"; then
+        ADD_TOKEN_RESULT=EXISTS; return 0
+    fi
+
+    printf '%s\n' "$nt" >> "$TOKEN_FILE"
+    sync
+    ADD_TOKEN_RESULT=OK
+    return 0
+}
+
+# remove_token <token> -> REMOVE_TOKEN_RESULT = OK|NOT_FOUND|LAST
+remove_token() {
+    rt="$1"
+
+    if ! is_valid_token "$rt"; then
+        REMOVE_TOKEN_RESULT=NOT_FOUND; return 1
+    fi
+
+    load_tokens
+    # Posledni token nejde odebrat - v rezimu TOKEN by se zarizeni stalo
+    # neovladatelnym na dalku a jedinou cestou zpet by byl fyzicky
+    # pristup ke karte.
+    if [ "$TOKEN_COUNT" -le 1 ]; then
+        REMOVE_TOKEN_RESULT=LAST; return 1
+    fi
+
+    tmp="$TOKEN_FILE.tmp.$$"
+    : > "$tmp"
+    while IFS= read -r t || [ -n "$t" ]; do
+        [ -z "$t" ] && continue
+        [ "$t" = "$rt" ] && continue
+        printf '%s\n' "$t" >> "$tmp"
+    done < "$TOKEN_FILE"
+    sync
+    mv -f "$tmp" "$TOKEN_FILE"
+    sync
+    REMOVE_TOKEN_RESULT=OK
+    return 0
+}
+
+# --- autorizace -----------------------------------------------------
+
+# is_mail_master <adresa> -> 0 = je v MAIL_MASTERS
+# Adresa uz prichazi malymi pismeny z mailrecv; MAIL_MASTERS z configu
+# snizime taky (tr s EXPLICITNIMI rozsahy - POSIX tridy busybox nemusi
+# mit).
+is_mail_master() {
+    [ -n "$MAIL_MASTERS" ] || return 1
+    ml=$(printf '%s' "$MAIL_MASTERS" | tr 'A-Z' 'a-z')
+    a=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
+    case ",$ml," in
+        *",$a,"*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# authorize_mail <odesilatel> <predmet>
+# Nastavi:
+#   AUTH_OK        1 = smi se vykonat
+#   AUTH_CMD       prikaz bez prefixu a bez tokenu
+#   AUTH_HAS_TOKEN 1 = ve zprave byl platny token
+#
+# Prefix "HUNTER " uz musi byt oriznuty volajicim? NE - resi se tady,
+# aby transport nemusel znat format.
+authorize_mail() {
+    AUTH_OK=0
+    AUTH_CMD=""
+    AUTH_HAS_TOKEN=0
+
+    from="$1"
+    subj=$(trim "$2")
+
+    # musi zacinat prefixem
+    case "$subj" in
+        [Hh][Uu][Nn][Tt][Ee][Rr]" "*) ;;
+        *) return 1 ;;
+    esac
+    rest=$(trim "${subj#* }")
+
+    # prvni slovo muze byt token
+    first="${rest%% *}"
+    if is_valid_token "$first"; then
+        AUTH_HAS_TOKEN=1
+        # kdyz za tokenem uz nic neni, prikaz je prazdny
+        if [ "$first" = "$rest" ]; then
+            AUTH_CMD=""
+        else
+            AUTH_CMD=$(trim "${rest#* }")
+        fi
+    else
+        AUTH_CMD="$rest"
+    fi
+
+    is_mail_master "$from" || return 1
+
+    case "$AUTH_TYPE" in
+        [Ss][Ee][Nn][Dd][Ee][Rr]) AUTH_OK=1 ;;
+        *) [ "$AUTH_HAS_TOKEN" = 1 ] && AUTH_OK=1 ;;
+    esac
+    return 0
+}
+
 # Jednoducha mezera mezi tokeny (vic mezer za sebou u vicoslovnych
 # prikazu neni podporovano - zname omezeni, viz spec).
 execute_command() {

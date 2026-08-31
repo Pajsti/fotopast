@@ -159,6 +159,11 @@ load_config() {
     : "${SNAP_WAIT:=25}"
     : "${MAX_SEND_PER_WAKE:=3}"
     : "${RUN_DEADLINE:=180}"
+    : "${AUTH_TYPE:=TOKEN}"
+    : "${MAIL_MASTERS:=}"
+    : "${REQUEST_MAX:=5}"
+    : "${IMAP_PORT:=993}"
+    : "${TOKEN_FILE:=$HUNTER_DIR/mail.token}"
 
     for req in SMTP_HOST SMTP_PORT SMTP_USER SMTP_TO AT_PORT; do
         eval "val=\${$req:-}"
