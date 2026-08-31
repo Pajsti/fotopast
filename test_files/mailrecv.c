@@ -181,7 +181,11 @@ static void lowercase(char *s)
 
 static void trim_ws(char *s)
 {
-    size_t n = strlen(s);
+    size_t n;
+    char *p = s;
+    while (*p == ' ' || *p == '\t') p++;
+    if (p != s) memmove(s, p, strlen(p) + 1);
+    n = strlen(s);
     while (n > 0 && (s[n-1] == ' ' || s[n-1] == '\t')) s[--n] = '\0';
 }
 
