@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <stdarg.h>
 #include <ctype.h>
 
@@ -171,6 +172,184 @@ static void usage(void)
         "list unseen | seen <uid>\n");
 }
 
+/* ----------------------------------------------------- hlavicky */
+
+static void lowercase(char *s)
+{
+    for (; *s; s++) *s = (char)tolower((unsigned char)*s);
+}
+
+static void trim_ws(char *s)
+{
+    size_t n = strlen(s);
+    while (n > 0 && (s[n-1] == ' ' || s[n-1] == '\t')) s[--n] = '\0';
+}
+
+/* Z "Pavel <a@b.cz>" udela "a@b.cz"; bez <> vezme cely retezec.
+ * Vystup je vzdy malymi pismeny. */
+static void extract_addr(const char *v, char *out, size_t outsz)
+{
+    const char *lt = strchr(v, '<');
+    size_t n;
+
+    if (lt) {
+        const char *gt = strchr(lt + 1, '>');
+        if (gt) {
+            n = (size_t)(gt - lt - 1);
+            if (n >= outsz) n = outsz - 1;
+            memcpy(out, lt + 1, n);
+            out[n] = '\0';
+            lowercase(out);
+            return;
+        }
+    }
+    while (*v == ' ' || *v == '\t') v++;
+    snprintf(out, outsz, "%s", v);
+    trim_ws(out);
+    lowercase(out);
+}
+
+/* Projde blok hlavicek a vytahne From a Subject. Rozbaluje pokracovaci
+ * radky (radek zacinajici mezerou/tabem patri k predchozi hlavicce). */
+static void parse_headers(char *blk, char *from, size_t fromsz,
+                          char *subj, size_t subjsz)
+{
+    char *line, *save;
+    char cur[LINE_SZ];
+    int which = 0;               /* 0 = nic, 1 = From, 2 = Subject */
+
+    from[0] = '\0';
+    subj[0] = '\0';
+    cur[0] = '\0';
+
+    for (line = blk; line && *line; line = save) {
+        char *nl = strchr(line, '\n');
+        if (nl) { *nl = '\0'; save = nl + 1; } else { save = NULL; }
+        { size_t l = strlen(line); if (l > 0 && line[l-1] == '\r') line[l-1] = '\0'; }
+
+        if (*line == ' ' || *line == '\t') {          /* pokracovani */
+            if (which) {
+                size_t c = strlen(cur);
+                const char *p = line;
+                while (*p == ' ' || *p == '\t') p++;
+                snprintf(cur + c, sizeof(cur) - c, " %s", p);
+            }
+            continue;
+        }
+
+        /* novy radek uzavira predchozi hlavicku */
+        if (which == 1) extract_addr(cur, from, fromsz);
+        else if (which == 2) { trim_ws(cur); snprintf(subj, subjsz, "%s", cur); }
+        which = 0;
+        cur[0] = '\0';
+
+        if (strncasecmp(line, "From:", 5) == 0) {
+            which = 1;
+            snprintf(cur, sizeof(cur), "%s", line + 5);
+        } else if (strncasecmp(line, "Subject:", 8) == 0) {
+            which = 2;
+            snprintf(cur, sizeof(cur), "%s", line + 8);
+        }
+    }
+    if (which == 1) extract_addr(cur, from, fromsz);
+    else if (which == 2) { trim_ws(cur); snprintf(subj, subjsz, "%s", cur); }
+}
+
+/* Nacte UID neprectenych zprav do pole. Vraci pocet, -1 pri chybe. */
+static int search_unseen(char *uids[], int maxuids)
+{
+    char tag[16], line[LINE_SZ];
+    int count = 0;
+
+    next_tag(tag, sizeof(tag));
+    imap_send(tag, "UID SEARCH UNSEEN");
+
+    for (;;) {
+        if (imap_readline(line, sizeof(line)) < 0) return -1;
+        if (is_tagged(line, tag)) return tag_ok(line, tag) ? count : -1;
+
+        if (strncmp(line, "* SEARCH", 8) == 0) {
+            char *p = line + 8;
+            while (*p && count < maxuids) {
+                char *e;
+                while (*p == ' ') p++;
+                if (!*p) break;
+                e = p;
+                while (*e && *e != ' ') e++;
+                {
+                    size_t n = (size_t)(e - p);
+                    char *u = malloc(n + 1);
+                    if (!u) return -1;
+                    memcpy(u, p, n);
+                    u[n] = '\0';
+                    uids[count++] = u;
+                }
+                p = e;
+            }
+        }
+    }
+}
+
+/* Stahne hlavicky jedne zpravy. Vraci 0 pri uspechu. */
+static int fetch_one(const char *uid, char *from, size_t fromsz,
+                     char *subj, size_t subjsz)
+{
+    char tag[16], line[LINE_SZ];
+
+    from[0] = '\0';
+    subj[0] = '\0';
+
+    next_tag(tag, sizeof(tag));
+    imap_send(tag, "UID FETCH %s (BODY.PEEK[HEADER.FIELDS (FROM SUBJECT)])", uid);
+
+    for (;;) {
+        char *br;
+        if (imap_readline(line, sizeof(line)) < 0) return -1;
+        if (is_tagged(line, tag)) return tag_ok(line, tag) ? 0 : -1;
+
+        /* literal na konci radku: "... {123}" */
+        br = strrchr(line, '{');
+        if (br && strchr(br, '}')) {
+            long n = strtol(br + 1, NULL, 10);
+            if (n > 0 && n < 65536) {
+                char *blk = malloc((size_t)n + 1);
+                if (!blk) return -1;
+                if (imap_read_bytes(blk, (size_t)n) < 0) { free(blk); return -1; }
+                blk[n] = '\0';
+                parse_headers(blk, from, fromsz, subj, subjsz);
+                free(blk);
+            }
+        }
+    }
+}
+
+static char uidvalidity[32] = "0";
+
+/* Vybere INBOX a zachyti UIDVALIDITY z "* OK [UIDVALIDITY 1234] ...".
+ * Vraci 0 pri uspechu. */
+static int select_inbox(void)
+{
+    char tag[16], line[LINE_SZ];
+
+    next_tag(tag, sizeof(tag));
+    imap_send(tag, "SELECT INBOX");
+
+    for (;;) {
+        char *p;
+        if (imap_readline(line, sizeof(line)) < 0) return -1;
+        if (is_tagged(line, tag)) return tag_ok(line, tag) ? 0 : -1;
+
+        p = strstr(line, "[UIDVALIDITY ");
+        if (p) {
+            size_t i = 0;
+            p += strlen("[UIDVALIDITY ");
+            while (*p >= '0' && *p <= '9' && i < sizeof(uidvalidity) - 1)
+                uidvalidity[i++] = *p++;
+            uidvalidity[i] = '\0';
+        }
+    }
+}
+
 /* ----------------------------------------------------- main */
 
 int main(int argc, char **argv)
@@ -218,15 +397,37 @@ int main(int argc, char **argv)
     if (imap_wait_tag(tag) != 0)
         tlsnet_die(1, "prihlaseni odmitnuto");
 
+    if (select_inbox() != 0)
+        tlsnet_die(1, "SELECT INBOX selhal");
+
     rc = 0;
-    /* podprikazy doplni Task 5 a 6 */
-    if (!strcmp(cmd, "noop")) {
+    if (!strcmp(cmd, "list") && arg && !strcmp(arg, "unseen")) {
+        char *uids[256];
+        char from[512], subj[LINE_SZ];
+        int n, k;
+
+        n = search_unseen(uids, 256);
+        if (n < 0) {
+            rc = 1;
+        } else {
+            /* UIDVALIDITY jde prvni - shell si ho zapamatuje a pouzije
+             * jako soucast dedup klice. */
+            printf("UIDVALIDITY|%s\n", uidvalidity);
+            for (k = 0; k < n; k++) {
+                if (fetch_one(uids[k], from, sizeof(from),
+                              subj, sizeof(subj)) == 0) {
+                    printf("MSG|%s|%s|%s\n", uids[k], from, subj);
+                }
+                free(uids[k]);
+            }
+            fflush(stdout);
+        }
+    } else if (!strcmp(cmd, "noop")) {
         rc = 0;
     } else {
         fprintf(stderr, "mailrecv: neznamy prikaz '%s'\n", cmd);
         rc = 3;
     }
-    (void)arg;
 
     next_tag(tag, sizeof(tag));
     imap_send(tag, "LOGOUT");
