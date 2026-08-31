@@ -182,15 +182,26 @@ authorize_mail() {
     return 0
 }
 
+# execute_command <text_prikazu> [ma_platny_token]
+#
+# Druhy argument rika, jestli zprava nesla platny token. Prikazy menici
+# OPRAVNENI (AUTH TYPE, ADD, REMOVE, ADD TOKEN, REMOVE TOKEN) ho vyzaduji
+# VZDY - i v rezimu SENDER. Tim je zaruceno, ze se z oslabeneho rezimu
+# jde vzdycky vratit a ze si podvrzeny mail nemuze sam pridat trvaly
+# pristup. Viz spec sekce 3.3.
+#
 # Jednoducha mezera mezi tokeny (vic mezer za sebou u vicoslovnych
 # prikazu neni podporovano - zname omezeni, viz spec).
 execute_command() {
     cmd=$(trim "$1")
+    has_token="${2:-0}"
 
     case "$cmd" in
         [Ss][Tt][Aa][Tt][Uu][Ss])
-            CMD_REPLY=$(build_status_reply)
+            load_tokens
+            CMD_REPLY="$(build_status_reply) TOKENS:$TOKEN_COUNT"
             ;;
+
         [Ff][Oo][Tt][Oo])
             # Neni overeno, ze umime vyvolat snimek bez znalosti MCU
             # protokolu / cloudove autorizace (spec sekce 7.4, otevreny
@@ -198,6 +209,7 @@ execute_command() {
             # funguje.
             CMD_REPLY='FOTO NOT SUPPORTED'
             ;;
+
         [Qq][Uu][Aa][Ll][Ii][Tt][Yy]" "[Hh][Dd])
             set_config_value QUALITY HD
             QUALITY=HD
@@ -208,37 +220,95 @@ execute_command() {
             # vzdy v kvalite, v jake je porizuje puvodni aplikace.
             CMD_REPLY='QUALITY SET TO HD'
             ;;
+
         [Qq][Uu][Aa][Ll][Ii][Tt][Yy]" "[Ll][Oo][Ww])
             set_config_value QUALITY LOW
             QUALITY=LOW
             CMD_REPLY='QUALITY SET TO LOW'
             ;;
+
         [Cc][Oo][Nn][Ff][Ii][Rr][Mm]" "[Oo][Nn])
             set_config_value CONFIRM ON
             CONFIRM=ON
             CMD_REPLY='CONFIRM ON'
             ;;
+
         [Cc][Oo][Nn][Ff][Ii][Rr][Mm]" "[Oo][Ff][Ff])
             set_config_value CONFIRM OFF
             CONFIRM=OFF
             CMD_REPLY='CONFIRM OFF'
             ;;
-        [Aa][Dd][Dd]" "*)
-            num=$(trim "${cmd#* }")
-            case "$num" in
-                +[0-9]*)
-                    add_master "$(normalize_phone "$num")"
-                    CMD_REPLY="ADDED $num"
-                    ;;
-                *)
-                    CMD_REPLY='ADD: INVALID NUMBER'
-                    ;;
-            esac
-            ;;
-        [Ww][Ii][Pp][Ee])
+
+        [Ww][Ii][Pp][Ee]" "[Cc][Oo][Nn][Ff][Ii][Rr][Mm])
             wipe_sent_snaps
             CMD_REPLY="WIPE DONE ($WIPE_COUNT photos, $(get_space_gb) free)"
             ;;
+
+        [Ww][Ii][Pp][Ee])
+            CMD_REPLY='WIPE NEEDS CONFIRM'
+            ;;
+
+        [Aa][Uu][Tt][Hh]" "[Tt][Yy][Pp][Ee]" "[Tt][Oo][Kk][Ee][Nn])
+            if [ "$has_token" != 1 ]; then CMD_REPLY='TOKEN REQUIRED'; return 0; fi
+            set_config_value AUTH_TYPE TOKEN
+            AUTH_TYPE=TOKEN
+            CMD_REPLY='AUTH TYPE SET TO TOKEN'
+            ;;
+
+        [Aa][Uu][Tt][Hh]" "[Tt][Yy][Pp][Ee]" "[Ss][Ee][Nn][Dd][Ee][Rr])
+            if [ "$has_token" != 1 ]; then CMD_REPLY='TOKEN REQUIRED'; return 0; fi
+            set_config_value AUTH_TYPE SENDER
+            AUTH_TYPE=SENDER
+            CMD_REPLY='AUTH TYPE SET TO SENDER'
+            ;;
+
+        [Aa][Dd][Dd]" "[Tt][Oo][Kk][Ee][Nn]" "*)
+            if [ "$has_token" != 1 ]; then CMD_REPLY='TOKEN REQUIRED'; return 0; fi
+            newtok=$(trim "${cmd##* }")
+            add_token "$newtok"
+            case "$ADD_TOKEN_RESULT" in
+                OK)        load_tokens; CMD_REPLY="TOKEN ADDED ($TOKEN_COUNT total)" ;;
+                EXISTS)    CMD_REPLY='TOKEN ALREADY PRESENT' ;;
+                TOO_SHORT) CMD_REPLY='TOKEN TOO SHORT (min 8)' ;;
+                BAD_CHARS) CMD_REPLY='TOKEN MUST NOT CONTAIN SPACES' ;;
+            esac
+            ;;
+
+        [Rr][Ee][Mm][Oo][Vv][Ee]" "[Tt][Oo][Kk][Ee][Nn]" "*)
+            if [ "$has_token" != 1 ]; then CMD_REPLY='TOKEN REQUIRED'; return 0; fi
+            oldtok=$(trim "${cmd##* }")
+            remove_token "$oldtok"
+            case "$REMOVE_TOKEN_RESULT" in
+                OK)        load_tokens; CMD_REPLY="TOKEN REMOVED ($TOKEN_COUNT left)" ;;
+                NOT_FOUND) CMD_REPLY='TOKEN NOT FOUND' ;;
+                LAST)      CMD_REPLY='CANNOT REMOVE LAST TOKEN' ;;
+            esac
+            ;;
+
+        [Aa][Dd][Dd]" "*)
+            if [ "$has_token" != 1 ]; then CMD_REPLY='TOKEN REQUIRED'; return 0; fi
+            tgt=$(trim "${cmd#* }")
+            case "$tgt" in
+                +[0-9]*) add_master "$(normalize_phone "$tgt")"
+                         CMD_REPLY="ADDED $tgt" ;;
+                *@*.*)   add_mail_master "$tgt"
+                         CMD_REPLY="ADDED $tgt" ;;
+                *)       CMD_REPLY='ADD: INVALID TARGET' ;;
+            esac
+            ;;
+
+        [Rr][Ee][Mm][Oo][Vv][Ee]" "*)
+            if [ "$has_token" != 1 ]; then CMD_REPLY='TOKEN REQUIRED'; return 0; fi
+            tgt=$(trim "${cmd#* }")
+            case "$tgt" in
+                +[0-9]*) remove_master "$(normalize_phone "$tgt")"
+                         CMD_REPLY="REMOVED $tgt" ;;
+                *@*.*)   remove_mail_master "$tgt"
+                         CMD_REPLY="REMOVED $tgt" ;;
+                *)       CMD_REPLY='REMOVE: INVALID TARGET' ;;
+            esac
+            ;;
+
         *)
             CMD_REPLY='UNKNOWN CMD'
             ;;

@@ -70,7 +70,12 @@ process_sms() {
 
         log "SMS od $from: $body"
         CMD_REPLY=""
-        execute_command "$body"
+        # SMS transport nezna tokeny (zadne mail.token pole ve zprave) -
+        # druhy argument je vzdy 0, takze privilegovane prikazy (AUTH
+        # TYPE, ADD, REMOVE, ADD TOKEN, REMOVE TOKEN) pres SMS nejdou a
+        # vraci "TOKEN REQUIRED". Zustavaji pristupne jen nezmenujici
+        # OPRAVNENI prikazy (STATUS, FOTO, QUALITY, CONFIRM, WIPE).
+        execute_command "$body" 0
         reply="$CMD_REPLY"
 
         if [ "$CONFIRM" = "ON" ] && [ -n "$reply" ]; then

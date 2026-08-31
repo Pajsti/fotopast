@@ -289,3 +289,49 @@ add_master() {
     set_config_value MASTERS "$newval"
     MASTERS="$newval"
 }
+
+# add_mail_master <adresa> / remove_mail_master <adresa>
+# MAIL_MASTERS je seznam oddeleny carkami, stejne jako MASTERS.
+add_mail_master() {
+    a=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
+    if is_mail_master "$a"; then
+        return 0
+    fi
+    if [ -z "$MAIL_MASTERS" ]; then
+        newval="$a"
+    else
+        newval="$MAIL_MASTERS,$a"
+    fi
+    set_config_value MAIL_MASTERS "$newval"
+    MAIL_MASTERS="$newval"
+}
+
+remove_mail_master() {
+    a=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
+    newval=""
+    old_ifs="$IFS"
+    IFS=','
+    for m in $MAIL_MASTERS; do
+        [ "$m" = "$a" ] && continue
+        [ -z "$m" ] && continue
+        if [ -z "$newval" ]; then newval="$m"; else newval="$newval,$m"; fi
+    done
+    IFS="$old_ifs"
+    set_config_value MAIL_MASTERS "$newval"
+    MAIL_MASTERS="$newval"
+}
+
+# remove_master <cislo> - totez pro telefonni cisla
+remove_master() {
+    newval=""
+    old_ifs="$IFS"
+    IFS=','
+    for m in $MASTERS; do
+        [ "$m" = "$1" ] && continue
+        [ -z "$m" ] && continue
+        if [ -z "$newval" ]; then newval="$m"; else newval="$newval,$m"; fi
+    done
+    IFS="$old_ifs"
+    set_config_value MASTERS "$newval"
+    MASTERS="$newval"
+}

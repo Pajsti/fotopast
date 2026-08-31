@@ -1,0 +1,98 @@
+#!/bin/sh
+. "$(dirname "$0")/assert.sh"
+. "$(dirname "$0")/fixture.sh"
+
+fixture_setup
+
+# execute_command <prikaz> <ma_platny_token>
+
+# --- WIPE vyzaduje CONFIRM ---
+CMD_REPLY=""; execute_command "WIPE" 1
+assert_eq "WIPE bez CONFIRM se nevykona" "$CMD_REPLY" "WIPE NEEDS CONFIRM"
+
+printf '%s\n' "$SDCARD/snaps/260828/210948_000_65535_P.jpg" > "$STATE_DIR/sent_list.txt"
+fixture_snap 260828 210948
+CMD_REPLY=""; execute_command "WIPE CONFIRM" 1
+assert_contains "WIPE CONFIRM vykona" "$CMD_REPLY" "WIPE DONE"
+
+# --- privilegovane prikazy vyzaduji token VZDY ---
+CMD_REPLY=""; execute_command "AUTH TYPE SENDER" 0
+assert_eq "AUTH TYPE bez tokenu" "$CMD_REPLY" "TOKEN REQUIRED"
+assert_eq "rezim nezmenen" "$AUTH_TYPE" "TOKEN"
+
+CMD_REPLY=""; execute_command "AUTH TYPE SENDER" 1
+assert_eq "AUTH TYPE s tokenem" "$CMD_REPLY" "AUTH TYPE SET TO SENDER"
+assert_eq "rezim zmenen" "$AUTH_TYPE" "SENDER"
+
+# --- UTOCNY TEST (vlastni, nad ramec briefu): i v rezimu SENDER musi
+# privilegovany prikaz BEZ tokenu selhat. Tohle je hlavni bezpecnostni
+# pravidlo celeho tasku - execute_command se pri rozhodovani o
+# privilegovanych vetvich nesmi nikdy ptat na AUTH_TYPE, jen na
+# has_token, ktery predava volajici (mailcmd.sh) podle toho, jestli
+# zprava skutecne nesla platny token, bez ohledu na rezim autorizace.
+CMD_REPLY=""; execute_command "ADD utocnik@evil.example" 0
+assert_eq "SENDER rezim: ADD bez tokenu porad vyzaduje token" "$CMD_REPLY" "TOKEN REQUIRED"
+assert_not_contains "utocnikova adresa se nedostala do configu" "$(cat "$CONFIG_FILE")" "utocnik@evil.example"
+assert_not_contains "utocnikova adresa se nedostala do MAIL_MASTERS v pameti" "$MAIL_MASTERS" "utocnik@evil.example"
+
+CMD_REPLY=""; execute_command "ADD TOKEN utocnikuvtoken99" 0
+assert_eq "SENDER rezim: ADD TOKEN bez tokenu porad vyzaduje token" "$CMD_REPLY" "TOKEN REQUIRED"
+load_tokens
+assert_eq "pocet tokenu nezmenen po odmitnutem pokusu" "$TOKEN_COUNT" "1"
+
+CMD_REPLY=""; execute_command "AUTH TYPE TOKEN" 1
+assert_eq "navrat do TOKEN" "$AUTH_TYPE" "TOKEN"
+
+CMD_REPLY=""; execute_command "ADD TOKEN novytoken99" 0
+assert_eq "ADD TOKEN bez tokenu" "$CMD_REPLY" "TOKEN REQUIRED"
+load_tokens
+assert_eq "ADD TOKEN bez tokenu nic neprida" "$TOKEN_COUNT" "1"
+
+CMD_REPLY=""; execute_command "ADD TOKEN novytoken99" 1
+assert_contains "ADD TOKEN s tokenem" "$CMD_REPLY" "TOKEN ADDED"
+assert_not_contains "odpoved neobsahuje hodnotu tokenu" "$CMD_REPLY" "novytoken99"
+
+CMD_REPLY=""; execute_command "REMOVE TOKEN novytoken99" 1
+assert_contains "REMOVE TOKEN" "$CMD_REPLY" "TOKEN REMOVED"
+assert_not_contains "odpoved REMOVE TOKEN neobsahuje hodnotu tokenu" "$CMD_REPLY" "novytoken99"
+
+# --- UTOCNY TEST: odebrani posledniho tokenu musi byt odmitnuto, i s
+# platnym tokenem v pozadavku (jinak by se zarizeni dalo trvale odriznout
+# od vzdaleneho ovladani - jediny token, ktery prave zbyva, ho odebira).
+CMD_REPLY=""; execute_command "REMOVE TOKEN tajnytoken1" 1
+assert_eq "posledni token" "$CMD_REPLY" "CANNOT REMOVE LAST TOKEN"
+load_tokens
+assert_eq "posledni token opravdu zustal" "$TOKEN_COUNT" "1"
+is_valid_token "tajnytoken1" && r=1 || r=0
+assert_eq "posledni token je porad platny" "$r" "1"
+
+# --- ADD / REMOVE adres a cisel ---
+CMD_REPLY=""; execute_command "ADD novy@example.com" 1
+assert_contains "ADD e-mailu" "$CMD_REPLY" "ADDED"
+assert_contains "adresa v configu" "$(cat "$CONFIG_FILE")" "novy@example.com"
+
+CMD_REPLY=""; execute_command "REMOVE novy@example.com" 0
+assert_eq "REMOVE bez tokenu take vyzaduje token" "$CMD_REPLY" "TOKEN REQUIRED"
+assert_contains "adresa porad v configu po odmitnutem REMOVE" "$(cat "$CONFIG_FILE")" "novy@example.com"
+
+CMD_REPLY=""; execute_command "REMOVE novy@example.com" 1
+assert_contains "REMOVE e-mailu" "$CMD_REPLY" "REMOVED"
+assert_not_contains "adresa pryc z configu" "$(cat "$CONFIG_FILE")" "novy@example.com"
+
+CMD_REPLY=""; execute_command "ADD +420111222333" 1
+assert_contains "ADD telefonu" "$CMD_REPLY" "ADDED"
+assert_contains "cislo v MASTERS" "$MASTERS" "+420111222333"
+
+CMD_REPLY=""; execute_command "ADD nesmysl" 1
+assert_eq "neplatny argument" "$CMD_REPLY" "ADD: INVALID TARGET"
+
+# --- prikazy bez zmeny opravneni token nevyzaduji (zpetna kompatibilita) ---
+CMD_REPLY=""; execute_command "QUALITY LOW" 0
+assert_eq "QUALITY beze tokenu porad funguje" "$CMD_REPLY" "QUALITY SET TO LOW"
+
+# --- STATUS obsahuje pocet tokenu ---
+CMD_REPLY=""; execute_command "STATUS" 1
+assert_contains "STATUS ma TOKENS" "$CMD_REPLY" "TOKENS:"
+
+fixture_teardown
+finish
