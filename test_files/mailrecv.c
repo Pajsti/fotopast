@@ -426,6 +426,10 @@ int main(int argc, char **argv)
             }
             fflush(stdout);
         }
+    } else if (!strcmp(cmd, "seen") && arg) {
+        next_tag(tag, sizeof(tag));
+        imap_send(tag, "UID STORE %s +FLAGS (\\Seen)", arg);
+        rc = (imap_wait_tag(tag) == 0) ? 0 : 1;
     } else if (!strcmp(cmd, "noop")) {
         rc = 0;
     } else {
