@@ -35,6 +35,7 @@ mkdir -p "$STATE_DIR" 2>/dev/null
 
 . "$HUNTER_DIR/lib/common.sh"
 . "$HUNTER_DIR/lib/status.sh"
+. "$HUNTER_DIR/lib/command.sh"
 . "$HUNTER_DIR/lib/mail.sh"
 . "$HUNTER_DIR/lib/sms.sh"
 
