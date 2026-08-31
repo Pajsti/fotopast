@@ -182,6 +182,37 @@ authorize_mail() {
     return 0
 }
 
+# build_cmd_listing
+# Vypis prikazu, ktery ODRAZI AKTUALNI REZIM - ukazuje presne to, co je
+# ted potreba napsat. Hodnota tokenu se nikdy nevypisuje, jen "<token>".
+# Bez diakritiky, stejne jako zbytek zarizeni.
+build_cmd_listing() {
+    case "$AUTH_TYPE" in
+        [Ss][Ee][Nn][Dd][Ee][Rr]) mode="SENDER"; p="HUNTER" ;;
+        *)                        mode="TOKEN";  p="HUNTER <token>" ;;
+    esac
+    # privilegovane prikazy maji token vzdy, bez ohledu na rezim
+    pp="HUNTER <token>"
+
+    printf 'HUNTER commands (auth mode: %s)\n\n' "$mode"
+    printf '%s STATUS                  stav: baterie/signal/misto\n' "$p"
+    printf '%s LAST <N>                N nejnovejsich fotek\n' "$p"
+    printf '%s DATE <YYMMDD>           fotky z daneho dne\n' "$p"
+    printf '%s GET <jmeno>             konkretni soubor\n' "$p"
+    printf '%s QUALITY HD|LOW          kvalita odesilanych fotek\n' "$p"
+    printf '%s CONFIRM ON|OFF          potvrzovaci odpovedi\n' "$p"
+    printf '%s WIPE CONFIRM            smaze jiz odeslane fotky\n' "$p"
+    printf '%s LIST CMD                tento vypis\n' "$p"
+    printf '%s ADD <tel|mail>          pridat opravneneho   [vzdy token]\n' "$pp"
+    printf '%s REMOVE <tel|mail>       odebrat opravneneho  [vzdy token]\n' "$pp"
+    printf '%s ADD TOKEN <novy>        pridat token         [vzdy token]\n' "$pp"
+    printf '%s REMOVE TOKEN <token>    odebrat token        [vzdy token]\n' "$pp"
+    printf '%s AUTH TYPE TOKEN|SENDER  zmena rezimu         [vzdy token]\n' "$pp"
+    printf '%s FOTO                    nepodporovano\n' "$p"
+    printf '\n<token> = kterykoli z tokenu v hunter/mail.token'
+    printf ' (nikdy se nevypisuje)\n'
+}
+
 # execute_command <text_prikazu> [ma_platny_token]
 #
 # Druhy argument rika, jestli zprava nesla platny token. Prikazy menici
@@ -307,6 +338,10 @@ execute_command() {
                          CMD_REPLY="REMOVED $tgt" ;;
                 *)       CMD_REPLY='REMOVE: INVALID TARGET' ;;
             esac
+            ;;
+
+        [Ll][Ii][Ss][Tt]" "[Cc][Mm][Dd])
+            CMD_REPLY=$(build_cmd_listing)
             ;;
 
         *)
