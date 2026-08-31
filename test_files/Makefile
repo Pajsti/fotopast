@@ -22,7 +22,7 @@ CFLAGS  = -O2 -Wall -Wextra -std=gnu99 -static -mfp32
 LDFLAGS = -static
 
 AT_TOOLS   = atcmd smssend smsrecv
-MAIL_TOOLS = mailsend
+MAIL_TOOLS = mailsend mailrecv
 UTIL_TOOLS = snapready logscan
 ALL_TOOLS  = $(AT_TOOLS) $(MAIL_TOOLS) $(UTIL_TOOLS)
 
@@ -57,10 +57,13 @@ smssend: smssend.o atport.o
 smsrecv: smsrecv.o atport.o
 	$(CC) $(LDFLAGS) -o $@ $^
 
-mailsend: mailsend.c
+tlsnet.o: tlsnet.c tlsnet.h
+	$(CC) $(CFLAGS) -I"$(MBEDTLS)/include" -c -o $@ $<
+
+mailsend: mailsend.c tlsnet.o
 	@test -d "$(MBEDTLS)/include" || \
 	  { echo "chybi mbedTLS v $(MBEDTLS) - spust nejdriv ./build.sh"; exit 1; }
-	$(CC) $(CFLAGS) -I"$(MBEDTLS)/include" -o $@ mailsend.c \
+	$(CC) $(CFLAGS) -I"$(MBEDTLS)/include" -o $@ mailsend.c tlsnet.o \
 	  -L"$(MBEDTLS)/lib" -lmbedtls -lmbedx509 -lmbedcrypto $(LDFLAGS)
 
 snapready: snapready.c
