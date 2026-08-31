@@ -45,6 +45,7 @@ load_config
 RUN_START=$(date +%s)
 RUN_DEADLINE_TS=$((RUN_START + RUN_DEADLINE))
 MAIN_PID=$$
+REQUESTED_SNAPS=""
 
 if ! acquire_lock; then
     log "jina instance hunter.sh uz bezi, koncim"

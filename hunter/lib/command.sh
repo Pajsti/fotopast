@@ -213,6 +213,118 @@ build_cmd_listing() {
     printf ' (nikdy se nevypisuje)\n'
 }
 
+# --- vyzadani fotek -------------------------------------------------
+#
+# Vyzadane fotky OBCHAZEJI sent_list.txt - preposlat uz odeslanou fotku
+# je cely smysl veci. Sbiraji se do REQUESTED_SNAPS (cesty oddelene
+# novym radkem), ktere hunter.sh sloucí s automatickymi kandidaty.
+#
+# Strop je REQUEST_MAX, oddeleny od MAX_SEND_PER_WAKE - o vyzadane fotky
+# si uzivatel rekl vyslovne.
+
+# request_add <cesta> - prida cestu, hlida strop. Vraci 1 pri dosazeni
+# stropu (volajici ma prestat pridavat).
+request_add() {
+    n=$(printf '%s' "$REQUESTED_SNAPS" | grep -c . )
+    [ "$n" -ge "$REQUEST_MAX" ] && return 1
+    if [ -z "$REQUESTED_SNAPS" ]; then
+        REQUESTED_SNAPS="$1"
+    else
+        REQUESTED_SNAPS="$REQUESTED_SNAPS
+$1"
+    fi
+    return 0
+}
+
+# request_count
+request_count() {
+    printf '%s' "$REQUESTED_SNAPS" | grep -c .
+}
+
+# Porovnavani stari snimku.
+#
+# Cesta ma tvar snaps/<YYMMDD>/<HHMMSS>_... Porovnava se CISELNE a ve
+# DVOU krocich (nejdriv datum, pak cas), ne jako jedno dvanactimistne
+# cislo ani jako retezec:
+#   - operator \> uvnitr [ ] neni v POSIXu definovany a busybox ho
+#     nemusi mit,
+#   - dvanactimistne cislo by preteklo v 32bitove aritmetice.
+# Sestimistne casti (max 999999) se do 32 bitu vejdou bez problemu.
+#
+# ZNAME OMEZENI: rok se bere jako YY, takze porovnani se rozbije na
+# prelomu stoleti (99 -> 00). Pri nespolehlivych hodinach zarizeni
+# (viz spec 2.1) je to prijatelne.
+snap_date_of() { sp=${1%/*}; printf '%s' "${sp##*/}"; }
+snap_time_of() { sb=${1##*/}; printf '%s' "${sb%%_*}"; }
+
+snap_num6() {
+    case "$1" in [0-9][0-9][0-9][0-9][0-9][0-9]) return 0 ;; esac
+    return 1
+}
+
+# snap_newer <a> <b> -> 0 kdyz a je novejsi nez b
+snap_newer() {
+    ad=$(snap_date_of "$1"); at=$(snap_time_of "$1")
+    bd=$(snap_date_of "$2"); bt=$(snap_time_of "$2")
+    snap_num6 "$ad" && snap_num6 "$at" || return 1
+    snap_num6 "$bd" && snap_num6 "$bt" || return 0
+    [ "$ad" -gt "$bd" ] && return 0
+    [ "$ad" -lt "$bd" ] && return 1
+    [ "$at" -gt "$bt" ] && return 0
+    return 1
+}
+
+# request_last <N> - N nejnovejsich fotek.
+# Busybox nema sort, takze se N-krat hleda maximum - pri REQUEST_MAX <= 5
+# a stovkach souboru je to zanedbatelne.
+request_last() {
+    want="$1"
+    [ "$want" -gt "$REQUEST_MAX" ] && want="$REQUEST_MAX"
+
+    taken=""
+    i=0
+    while [ "$i" -lt "$want" ]; do
+        best=""
+        for f in $(find "$SDCARD/snaps" -type f -name '*.jpg' 2>/dev/null); do
+            case "
+$taken" in
+                *"
+$f"*) continue ;;
+            esac
+            if [ -z "$best" ] || snap_newer "$f" "$best"; then
+                best="$f"
+            fi
+        done
+        [ -z "$best" ] && break
+        taken="$taken
+$best"
+        request_add "$best" || break
+        i=$((i + 1))
+    done
+}
+
+# request_date <YYMMDD>
+request_date() {
+    d="$1"
+    for f in $(find "$SDCARD/snaps/$d" -type f -name '*.jpg' 2>/dev/null); do
+        request_add "$f" || break
+    done
+}
+
+# request_get <jmeno> - jen holy nazev souboru; cokoli s "/" nebo ".."
+# se odmita, aby se pres nej nedalo sahnout mimo snaps/.
+request_get() {
+    name="$1"
+    case "$name" in
+        */*|*..*|"") return 2 ;;
+    esac
+    for f in $(find "$SDCARD/snaps" -type f -name "$name" 2>/dev/null); do
+        request_add "$f"
+        return 0
+    done
+    return 1
+}
+
 # execute_command <text_prikazu> [ma_platny_token]
 #
 # Druhy argument rika, jestli zprava nesla platny token. Prikazy menici
@@ -342,6 +454,48 @@ execute_command() {
 
         [Ll][Ii][Ss][Tt]" "[Cc][Mm][Dd])
             CMD_REPLY=$(build_cmd_listing)
+            ;;
+
+        [Ll][Aa][Ss][Tt]" "*)
+            n=$(trim "${cmd#* }")
+            case "$n" in
+                ''|*[!0-9]*) CMD_REPLY='LAST: INVALID COUNT'; return 0 ;;
+            esac
+            [ "$n" -lt 1 ] && { CMD_REPLY='LAST: INVALID COUNT'; return 0; }
+            request_last "$n"
+            got=$(request_count)
+            if [ "$got" = 0 ]; then
+                CMD_REPLY='LAST: NOT FOUND'
+            elif [ "$n" -gt "$REQUEST_MAX" ]; then
+                CMD_REPLY="SENDING $got (capped at REQUEST_MAX=$REQUEST_MAX)"
+            else
+                CMD_REPLY="SENDING $got"
+            fi
+            ;;
+
+        [Dd][Aa][Tt][Ee]" "*)
+            d=$(trim "${cmd#* }")
+            case "$d" in
+                [0-9][0-9][0-9][0-9][0-9][0-9]) ;;
+                *) CMD_REPLY='DATE: INVALID FORMAT'; return 0 ;;
+            esac
+            request_date "$d"
+            got=$(request_count)
+            if [ "$got" = 0 ]; then
+                CMD_REPLY='DATE: NOT FOUND'
+            else
+                CMD_REPLY="SENDING $got"
+            fi
+            ;;
+
+        [Gg][Ee][Tt]" "*)
+            name=$(trim "${cmd#* }")
+            request_get "$name"
+            case "$?" in
+                0) CMD_REPLY="SENDING $(request_count)" ;;
+                1) CMD_REPLY='GET: NOT FOUND' ;;
+                2) CMD_REPLY='GET: INVALID NAME' ;;
+            esac
             ;;
 
         *)
