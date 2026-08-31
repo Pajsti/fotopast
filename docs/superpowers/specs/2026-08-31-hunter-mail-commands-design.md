@@ -93,6 +93,55 @@ spojení spadne, zpráva se vrátí a vykoná se podruhé. IMAP navíc dává
 **stabilní UID**, což je přesně ten dedup klíč, který kvůli výpadkům
 potřebujeme.
 
+### 2.4 Ověřeno na Seznamu (Task 2, 2026-08-31)
+
+Bod z sekce 6 (test 1) proveden z Raspberry Pi proti `imap.seznam.cz:993`
+skutečným účtem `fotopast.pajsti@seznam.cz` (stejné heslo jako
+`smtp.pass`). Brána prošla, `IMAP_HOST`/`IMAP_PORT` ze sekce 5 jsou
+potvrzené beze změny:
+
+- Implicitní TLS na 993 funguje, uvítání: `* OK Seznam IMAP server ready`.
+- `LOGIN`/`SELECT INBOX`/`UID SEARCH UNSEEN`/`UID FETCH`/`UID STORE
+  +FLAGS (\Seen)`/`LOGOUT` — všechno `OK` proti reálnému účtu.
+
+**Past při ručním testování přes `openssl s_client -crlf`:** psát do
+`printf` doslovné `\r\n` a zároveň nechat zapnuté `-crlf` posílá
+`\r\r\n` (openssl `-crlf` samo převádí `\n`→`\r\n`, takže doslovné `\r`
+v datech se zdvojí). Server na to reagoval `a1 BAD ... has only two
+parameters` a **do chybové hlášky vracel doslovné heslo** — bezpečnostně
+citlivé zjištění pro každého, kdo bude v budoucnu ručně ladit protokol
+přes `openssl s_client`: buď nechat converzi na `-crlf` (`printf` jen
+s `\n`), nebo vypnout `-crlf` a psát `\r\n` sám — nikdy obojí najednou.
+`mailrecv` psaný nad `tlsnet` tomuhle nepodléhá, skládá bajty přímo bez
+terminálové vrstvy, ale je to důvod navíc **nikdy nelogovat surová
+chybová hlášení IMAP serveru beze filtru** (viz i požadavek v sekci
+3.3, že se token nikdy neloguje).
+
+Referenční tvar `UID FETCH * (BODY.PEEK[HEADER.FIELDS (FROM SUBJECT)])`
+pro testovací zprávu s předmětem `HUNTER testtoken STATUS` (pro Task 5):
+
+```
+* 3 FETCH (UID 4 BODY[HEADER.FIELDS ("FROM" "SUBJECT")] {71}
+From: <fotopast.pajsti@seznam.cz>
+Subject: HUNTER testtoken STATUS
+
+)
+a4 OK FETCH completed
+```
+
+Důležité pro parser:
+
+- **`UID` je před `BODY[...]`** v odpovědi tohoto serveru (ne naopak —
+  brief varoval, že to je server-specific).
+- Odpověď echoje jména polí v uvozovkách (`"FROM" "SUBJECT"`), i když
+  dotaz šel bez uvozovek.
+- Netagovaná odpověď má tvar `* <MSN> FETCH (...)` — sekvenční číslo
+  zprávy, ne UID; UID je až uvnitř závorky jako `UID <n>`.
+- Za literálem `{71}` následuje přesně `71` bajtů surových hlavičkových
+  dat vč. koncového prázdného řádku, pak `)` uzavírá závorku FETCH.
+- `.PEEK` v požadavku se v odpovědi nezobrazí (`BODY[...]`, ne
+  `BODY.PEEK[...]`) a zpráva zůstala `\Unseen`, jak má.
+
 ## 3. Příkazový jazyk
 
 ### 3.1 Tvar předmětu
