@@ -328,7 +328,7 @@ void tlsnet_handshake(const char *host, const char *cafile)
         /* Bez CA svazku je spojeni sifrovane, ale neoveruje se identita
          * serveru - je zranitelne vuci man-in-the-middle. Na testovani ano,
          * do ostreho Hunteru dodej --ca. */
-        fprintf(stderr, "mailsend: VAROVANI: bez --ca se neoveruje certifikat serveru\n");
+        fprintf(stderr, "%s: VAROVANI: bez --ca se neoveruje certifikat serveru\n", progname);
         mbedtls_ssl_conf_authmode(&ssl_conf, MBEDTLS_SSL_VERIFY_NONE);
     }
 
