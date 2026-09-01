@@ -12,13 +12,29 @@
 # ani ji neoznacime prectenou. Ctem stejnou schranku, ze ktere Hunter
 # odesila, a nesmime prebirat cizi postu.
 
+# mailrecv_run <prikaz...>
+# Obalka nad bin/mailrecv: doplni spolecne argumenty (host/port/ucet/
+# heslo) a --ca JEN kdyz je CA_FILE neprazdny. Prazdny CA_FILE musi
+# znamenat, ze se --ca neposila vubec - prazdny retezec by mailrecv vzal
+# jako cestu k souboru a spojeni by skoncilo chybou "nepodarilo se nacist
+# CA soubor". Diky obalce ma vsech nekolik volani mailrecv stejne
+# argumenty a nemuze se stat, ze by na jednom z nich --ca chybelo.
+mailrecv_run() {
+    if [ -n "$CA_FILE" ]; then
+        "$HUNTER_DIR/bin/mailrecv" "$IMAP_HOST" "$IMAP_PORT" \
+            "$SMTP_USER" --pass-file "$HUNTER_DIR/smtp.pass" \
+            --ca "$CA_FILE" "$@"
+    else
+        "$HUNTER_DIR/bin/mailrecv" "$IMAP_HOST" "$IMAP_PORT" \
+            "$SMTP_USER" --pass-file "$HUNTER_DIR/smtp.pass" "$@"
+    fi
+}
+
 process_mail() {
     [ -n "$IMAP_HOST" ] || { log "IMAP_HOST nenastaven, prikazy preskoceny"; return 0; }
     [ -f "$HUNTER_DIR/smtp.pass" ] || { log "chybi smtp.pass, prikazy preskoceny"; return 0; }
 
-    listing=$("$HUNTER_DIR/bin/mailrecv" "$IMAP_HOST" "$IMAP_PORT" \
-                "$SMTP_USER" --pass-file "$HUNTER_DIR/smtp.pass" \
-                list unseen 2>>"$LOG_FILE")
+    listing=$(mailrecv_run list unseen 2>>"$LOG_FILE")
     [ -z "$listing" ] && return 0
 
     # UIDVALIDITY je soucasti dedup klice: po (vzacnem) znovuvytvoreni
@@ -64,9 +80,7 @@ process_mail() {
         if [ -f "$STATE_DIR/mail_seen.txt" ] && \
            fgrep -qxF "$key" "$STATE_DIR/mail_seen.txt" 2>/dev/null; then
             log "mail UID $uid jiz zpracovan drive (vypadek napajeni?), jen oznacuji"
-            "$HUNTER_DIR/bin/mailrecv" "$IMAP_HOST" "$IMAP_PORT" \
-                "$SMTP_USER" --pass-file "$HUNTER_DIR/smtp.pass" \
-                seen "$uid" >>"$LOG_FILE" 2>&1
+            mailrecv_run seen "$uid" >>"$LOG_FILE" 2>&1
             IFS='
 '; continue
         fi
@@ -78,9 +92,7 @@ process_mail() {
         if [ "$AUTH_OK" != 1 ]; then
             # Token se NIKDY neloguje - logujeme jen odesilatele.
             log "mail od '$from' neautorizovan (rezim $AUTH_TYPE), odmitnuto bez odpovedi"
-            "$HUNTER_DIR/bin/mailrecv" "$IMAP_HOST" "$IMAP_PORT" \
-                "$SMTP_USER" --pass-file "$HUNTER_DIR/smtp.pass" \
-                seen "$uid" >>"$LOG_FILE" 2>&1
+            mailrecv_run seen "$uid" >>"$LOG_FILE" 2>&1
             IFS='
 '; continue
         fi
@@ -118,9 +130,7 @@ process_mail() {
             send_reply_mail "$from" "$CMD_REPLY"
         fi
 
-        "$HUNTER_DIR/bin/mailrecv" "$IMAP_HOST" "$IMAP_PORT" \
-            "$SMTP_USER" --pass-file "$HUNTER_DIR/smtp.pass" \
-            seen "$uid" >>"$LOG_FILE" 2>&1
+        mailrecv_run seen "$uid" >>"$LOG_FILE" 2>&1
 
         IFS='
 '

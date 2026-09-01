@@ -165,6 +165,58 @@ assert_eq "SENDER bez tokenu: bezny prikaz se vykona" "$QUALITY" "LOW"
 set_config_value AUTH_TYPE TOKEN
 AUTH_TYPE=TOKEN
 
+# =====================================================================
+# CA_FILE -> --ca pro mailrecv i mailsend.
+#
+# Bez --ca je TLS sifrovane, ale identita serveru se NEOVERUJE, takze
+# kdokoli v pozici man-in-the-middle si precte heslo do schranky i token
+# z predmetu. mailrecv --ca dlouho vubec nemel (mel v kodu natvrdo NULL).
+#
+# Overuje se OBOJI: ze se pri nastavenem CA_FILE preda, a ze se pri
+# prazdnem NEPREDA vubec - prazdny retezec by klient vzal jako cestu k
+# souboru a spojeni by skoncilo chybou, takze uz bezici instalace bez CA
+# svazku na karte musi fungovat presne jako drive.
+# =====================================================================
+
+# fake mailrecv, ktery si navic zapisuje vsechny argumenty
+cat > "$HUNTER_DIR/bin/mailrecv" <<EOF
+#!/bin/sh
+echo "\$@" >> "$FIX/recv_args.log"
+for a in "\$@"; do
+  case "\$a" in
+    list) cat "$FIX/listing.txt" 2>/dev/null; exit 0 ;;
+    seen) shift; echo "\$@" >> "$FIX/seen.log"; exit 0 ;;
+  esac
+done
+exit 0
+EOF
+chmod +x "$HUNTER_DIR/bin/mailrecv"
+
+CA_FILE=""
+printf 'UIDVALIDITY|999\nMSG|930|paja.stindl@seznam.cz|HUNTER tajnytoken1 STATUS\n' > "$FIX/listing.txt"
+: > "$FIX/seen.log"; : > "$FIX/sent.log"; : > "$FIX/recv_args.log"
+process_mail
+assert_not_contains "prazdny CA_FILE: mailrecv nedostane --ca" "$(cat "$FIX/recv_args.log")" "--ca"
+assert_not_contains "prazdny CA_FILE: mailsend nedostane --ca" "$(cat "$FIX/sent.log")" "--ca"
+assert_contains     "prazdny CA_FILE: prikaz se presto vykona" "$(cat "$FIX/seen.log")" "930"
+
+CA_FILE="$HUNTER_DIR/ca-certificates.crt"
+printf 'UIDVALIDITY|999\nMSG|931|paja.stindl@seznam.cz|HUNTER tajnytoken1 STATUS\n' > "$FIX/listing.txt"
+: > "$FIX/seen.log"; : > "$FIX/sent.log"; : > "$FIX/recv_args.log"
+process_mail
+assert_contains "nastaveny CA_FILE: mailrecv dostane --ca s cestou" \
+                "$(cat "$FIX/recv_args.log")" "--ca $CA_FILE"
+assert_contains "nastaveny CA_FILE: dostane ho i oznaceni seen (druhe volani)" \
+                "$(cat "$FIX/recv_args.log")" "--ca $CA_FILE seen"
+assert_contains "nastaveny CA_FILE: mailsend (odpoved) dostane --ca s cestou" \
+                "$(cat "$FIX/sent.log")" "--ca $CA_FILE"
+CA_FILE=""
+
+# load_config nesmi CA_FILE vyzadovat - vychozi je prazdny
+unset CA_FILE
+load_config
+assert_eq "vychozi CA_FILE je prazdny (klic v configu chybi)" "$CA_FILE" ""
+
 # --- token se nikde nezaloguje (kumulativne za cely beh testu) ---
 assert_not_contains "log souboru neobsahuje token" "$(cat "$LOG_FILE")" "tajnytoken1"
 

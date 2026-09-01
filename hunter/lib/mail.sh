@@ -102,6 +102,20 @@ resolve_attach_path() {
     fi
 }
 
+# mailsend_run <argumenty...>
+# Obalka nad bin/mailsend: doplni --ca JEN kdyz je CA_FILE neprazdny.
+# Prazdny CA_FILE musi znamenat, ze se --ca neposila vubec - prazdny
+# retezec by mailsend vzal jako cestu k souboru a odeslani by skoncilo
+# chybou "nepodarilo se nacist CA soubor". Stejna obalka jako
+# mailrecv_run v lib/mailcmd.sh.
+mailsend_run() {
+    if [ -n "$CA_FILE" ]; then
+        "$HUNTER_DIR/bin/mailsend" --ca "$CA_FILE" "$@"
+    else
+        "$HUNTER_DIR/bin/mailsend" "$@"
+    fi
+}
+
 # send_snap <cesta>
 # Odesle jeden snimek e-mailem. Vraci navratovy kod mailsend (0 =
 # potvrzeno serverem). Volajici smi pripsat do sent_list.txt JEN pri
@@ -118,7 +132,7 @@ send_snap() {
     attach_path=$(resolve_attach_path "$snap_path" "$daydir" "$fname")
     log "kvalita: QUALITY=$QUALITY, priloha=$attach_path"
 
-    "$HUNTER_DIR/bin/mailsend" \
+    mailsend_run \
         --host "$SMTP_HOST" --port "$SMTP_PORT" \
         --user "$SMTP_USER" --pass-file "$HUNTER_DIR/smtp.pass" \
         --to "$SMTP_TO" --subject "$subject" \
@@ -133,7 +147,7 @@ send_snap() {
 send_reply_mail() {
     to="$1"
     text="$2"
-    "$HUNTER_DIR/bin/mailsend" \
+    mailsend_run \
         --host "$SMTP_HOST" --port "$SMTP_PORT" \
         --user "$SMTP_USER" --pass-file "$HUNTER_DIR/smtp.pass" \
         --to "$to" --subject "HUNTER reply" \

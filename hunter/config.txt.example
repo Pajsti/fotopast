@@ -43,6 +43,19 @@ SMTP_TLS=starttls
 IMAP_HOST=imap.seznam.cz
 IMAP_PORT=993
 
+# CA svazek pro overeni certifikatu SMTP i IMAP serveru. Kdyz je prazdny
+# (nebo klic uplne chybi), je spojeni sifrovane, ale identita serveru se
+# NEOVERUJE - kdokoli v pozici man-in-the-middle (podvrzeny 4G vysilac,
+# nepratelsky upstream) muze precist heslo do schranky i token, ktery se
+# veze v predmetu prikazoveho mailu. Pro ostry provoz zkopiruj svazek na
+# kartu a odkomentuj:
+#CA_FILE=/tmp/mnt/sdcard/hunter/ca-certificates.crt
+# POZOR: podpora --ca v mailrecv je novejsi nez binarky, ktere uz mohou
+# byt na karte. Nez tenhle klic nastavis, over, ze bin/mailrecv je z
+# aktualniho prekladu (starsi build vezme "--ca" jako nazev prikazu,
+# skonci s kodem 3 a prikazovy kanal tise prestane fungovat):
+#   hunter/bin/mailrecv 2>&1 | grep -q -- --ca && echo OK || echo STARY
+
 # Autorizovane e-mailove adresy pro prikazy, oddelene carkami.
 # Piste malymi pismeny.
 MAIL_MASTERS=paja.stindl@seznam.cz

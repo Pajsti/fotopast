@@ -171,6 +171,12 @@ load_config() {
     : "${REQUEST_MAX:=5}"
     : "${IMAP_PORT:=993}"
     : "${TOKEN_FILE:=$HUNTER_DIR/mail.token}"
+    # CA svazek pro overeni certifikatu SMTP/IMAP serveru. PRAZDNY je
+    # vychozi stav: bez nej je spojeni sifrovane, ale identita serveru se
+    # neoveruje (mailsend/mailrecv na to samy varuji na stderr). Kdyz je
+    # nastaveny, preda se obema klientum jako --ca. Zamerne se nevynucuje,
+    # aby uz bezici instalace bez CA svazku na karte fungovaly dal.
+    : "${CA_FILE:=}"
 
     # Vyzadane fotky jdou v davce prvni; kdyby byl strop nizsi nez
     # REQUEST_MAX, vytlacily by automaticke kandidaty a cast vyzadanych by

@@ -5,8 +5,13 @@
  * parsovani MIME a dekodovani prenosovych kodovani.
  *
  * Pouziti:
- *   mailrecv <host> <port> <user> --pass-file <f> list unseen
- *   mailrecv <host> <port> <user> --pass-file <f> seen <uid>
+ *   mailrecv <host> <port> <user> --pass-file <f> [--ca <f>] list unseen
+ *   mailrecv <host> <port> <user> --pass-file <f> [--ca <f>] seen <uid>
+ *
+ * Bez --ca je spojeni sifrovane, ale identita serveru se NEOVERUJE (viz
+ * tlsnet_handshake) - v ostrem provozu dodej CA svazek, jinak muze
+ * protistranu odposlouchavat kdokoli v pozici man-in-the-middle a precist
+ * si i token, ktery se veze v predmetu prikazoveho mailu.
  *
  * Vystup pro "list unseen", jeden radek na zpravu:
  *   MSG|<uid>|<odesilatel>|<predmet>
@@ -169,7 +174,7 @@ static void usage(void)
 {
     fprintf(stderr,
         "pouziti: mailrecv <host> <port> <user> --pass-file <f> "
-        "list unseen | seen <uid>\n");
+        "[--ca <f>] [-v] list unseen | seen <uid>\n");
 }
 
 /* ----------------------------------------------------- hlavicky */
@@ -359,6 +364,7 @@ static int select_inbox(void)
 int main(int argc, char **argv)
 {
     const char *host, *port, *user, *pass = NULL, *cmd, *arg = NULL;
+    const char *cafile = NULL;
     char tag[16], qu[512], qp[512];
     int i, rc;
 
@@ -372,6 +378,8 @@ int main(int argc, char **argv)
     for (i = 4; i < argc; i++) {
         if (!strcmp(argv[i], "--pass-file") && i + 1 < argc)
             pass = read_pass_file(argv[++i]);
+        else if (!strcmp(argv[i], "--ca") && i + 1 < argc)
+            cafile = argv[++i];
         else if (!strcmp(argv[i], "-v"))
             tlsnet_set_verbose(1);
         else break;
@@ -383,7 +391,7 @@ int main(int argc, char **argv)
     if (i < argc) arg = argv[i];
 
     tlsnet_connect(host, port);
-    tlsnet_handshake(host, NULL);
+    tlsnet_handshake(host, cafile);
 
     /* uvitaci radek serveru */
     {
