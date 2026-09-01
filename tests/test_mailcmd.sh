@@ -125,6 +125,46 @@ assert_contains     "legitimni zprava oznacena precteno"                "$(cat "
 assert_contains     "neautorizovany taky oznacen precteno"              "$(cat "$FIX/seen.log")" "707"
 assert_not_contains "zprava bez prefixu NENI oznacena precteno"         "$(cat "$FIX/seen.log")" "606"
 
+# =====================================================================
+# REZIM SENDER pres CELY process_mail.
+#
+# Tohle je jediny scenar, ve kterem se AUTH_OK a AUTH_HAS_TOKEN lisi:
+# v rezimu SENDER staci k autorizaci odesilatel, takze AUTH_OK=1, ale
+# AUTH_HAS_TOKEN zustava 0. Prave tim se overuje SPOJ mezi transportem a
+# vykonavacem - ze mailcmd.sh predava execute_command jako druhy
+# argument AUTH_HAS_TOKEN, ne AUTH_OK.
+#
+# V rezimu TOKEN jsou obe promenne pro kazdou vykonanou zpravu shodne,
+# takze vsechny ostatni testy v tomhle souboru by prosly uplne stejne i
+# s prohozenym argumentem. Kdyby k te zamene doslo, rezim SENDER by
+# komukoli, kdo umi podvrhnout hlavicku From, dal ADD TOKEN, AUTH TYPE
+# i ADD/REMOVE - a sada by zustala zelena.
+# =====================================================================
+set_config_value AUTH_TYPE SENDER
+AUTH_TYPE=SENDER
+
+# a) privilegovany prikaz od autorizovaneho odesilatele BEZ tokenu
+#    musi byt odmitnut az na konci retezu, uvnitr execute_command
+printf 'UIDVALIDITY|999\nMSG|920|paja.stindl@seznam.cz|HUNTER ADD TOKEN pokusnytoken9\n' > "$FIX/listing.txt"
+: > "$FIX/seen.log"; : > "$FIX/sent.log"
+process_mail
+is_valid_token "pokusnytoken9" && V=1 || V=0
+assert_eq       "SENDER bez tokenu: ADD TOKEN pres process_mail odmitnuto" "$V" "0"
+assert_contains "SENDER bez tokenu: odpoved rekne TOKEN REQUIRED" "$(cat "$FIX/sent.log")" "TOKEN REQUIRED"
+assert_contains "SENDER bez tokenu: zprava se presto oznaci prectenou" "$(cat "$FIX/seen.log")" "920"
+
+# b) protejsek: bezny (neprivilegovany) prikaz od tehoz odesilatele se
+#    v rezimu SENDER vykonat MA - jinak by test (a) prochazel i tehdy,
+#    kdyby se v SENDER rezimu nevykonavalo vubec nic
+QUALITY=HD
+printf 'UIDVALIDITY|999\nMSG|921|paja.stindl@seznam.cz|HUNTER QUALITY LOW\n' > "$FIX/listing.txt"
+: > "$FIX/seen.log"; : > "$FIX/sent.log"
+process_mail
+assert_eq "SENDER bez tokenu: bezny prikaz se vykona" "$QUALITY" "LOW"
+
+set_config_value AUTH_TYPE TOKEN
+AUTH_TYPE=TOKEN
+
 # --- token se nikde nezaloguje (kumulativne za cely beh testu) ---
 assert_not_contains "log souboru neobsahuje token" "$(cat "$LOG_FILE")" "tajnytoken1"
 
