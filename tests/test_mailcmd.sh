@@ -87,6 +87,31 @@ assert_not_contains "novytoken99 opravdu odebran z mail.token"     "$(cat "$TOKE
 assert_not_contains "hodnota odebirane ho tokenu se nezaloguje"    "$(cat "$LOG_FILE")" "novytoken99"
 assert_contains     "log obsahuje redigovanou znacku REMOVE TOKEN" "$(cat "$LOG_FILE")" "REMOVE TOKEN <redacted>"
 
+# --- kontrola, ze sirsi/benevolentnejsi redakce nerozbila normalni
+#     pripad: ADD TOKEN s JEDNOU mezerou se porad vykona A redaguje ---
+printf 'UIDVALIDITY|999\nMSG|910|paja.stindl@seznam.cz|HUNTER tajnytoken1 ADD TOKEN newtoken1\n' > "$FIX/listing.txt"
+: > "$FIX/seen.log"; : > "$FIX/sent.log"
+process_mail
+is_valid_token "newtoken1" && VALID=1 || VALID=0
+assert_eq           "jedna mezera: token se skutecne prida"            "$VALID" "1"
+assert_not_contains "jedna mezera: hodnota tokenu se nezaloguje"       "$(cat "$LOG_FILE")" "newtoken1"
+assert_contains     "jedna mezera: log obsahuje redigovanou znacku"    "$(cat "$LOG_FILE")" "ADD TOKEN <redacted>"
+
+# --- regrese: DVOJITA mezera mezi ADD a TOKEN je uzivatelsky preklep,
+#     ktery execute_command nerozpozna jako ADD TOKEN (spadne do
+#     obecneho ADD handleru, "ADD: INVALID TARGET", token SE NEPRIDA) -
+#     ale AUTH_CMD porad obsahuje hodnotu tokenu jako argument, a ta se
+#     NESMI zalogovat ani v tomhle "nerozpoznanem" pripade. Puvodni uzsi
+#     case vzor (presne jedna mezera) tohle nechytil - overeno proti
+#     realnemu volani, viz oprava v hunter/lib/mailcmd.sh. ---
+printf 'UIDVALIDITY|999\nMSG|911|paja.stindl@seznam.cz|HUNTER tajnytoken1 ADD  TOKEN newtoken2\n' > "$FIX/listing.txt"
+: > "$FIX/seen.log"; : > "$FIX/sent.log"
+process_mail
+is_valid_token "newtoken2" && VALID=1 || VALID=0
+assert_eq           "dvoji mezera: prikaz se NEVYKONA (execute_command ADD TOKEN nerozpozna)" "$VALID" "0"
+assert_not_contains "dvoji mezera: hodnota tokenu se presto nezaloguje" "$(cat "$LOG_FILE")" "newtoken2"
+assert_contains     "dvoji mezera: log obsahuje redigovanou znacku"    "$(cat "$LOG_FILE")" "<redacted>"
+
 # --- ensure_app_frozen se vola AZ PO uspesne autorizaci: v davce se
 #     3 zpravami (bez prefixu / neautorizovany odesilatel / legitimni)
 #     se smi zmrazit jen 1x ---

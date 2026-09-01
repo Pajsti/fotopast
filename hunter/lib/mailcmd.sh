@@ -96,10 +96,19 @@ process_mail() {
         # (ADD TOKEN <novy>/REMOVE TOKEN <stary>), ne jen jako auth-prefix -
         # ten uz authorize_mail odriznul. Do logu jde jen redigovana kopie;
         # execute_command dole dostava porad puvodni, neredigovany AUTH_CMD.
+        # Redakce je zamerne SIRSI/BENEVOLENTNEJSI nez presny dispatch v
+        # execute_command (ten vyzaduje jednu mezeru mezi ADD/REMOVE a
+        # TOKEN) - kdyby uzivatel omylem napsal dve mezery ("ADD  TOKEN"),
+        # execute_command by prikaz sice nerozpoznal (spadne do obecneho
+        # ADD/REMOVE handleru, vrati INVALID TARGET), ale AUTH_CMD porad
+        # obsahuje hodnotu tokenu jako argument - a ta se NESMI zalogovat
+        # ani v tomhle "nerozpoznanem" pripade. Radeji preredigovat neco
+        # navic (ztrata jen citelnosti logu) nez neredigovat neco, co
+        # token obsahuje.
         log_cmd="$AUTH_CMD"
         case "$AUTH_CMD" in
-            [Aa][Dd][Dd]" "[Tt][Oo][Kk][Ee][Nn]" "*) log_cmd="ADD TOKEN <redacted>" ;;
-            [Rr][Ee][Mm][Oo][Vv][Ee]" "[Tt][Oo][Kk][Ee][Nn]" "*) log_cmd="REMOVE TOKEN <redacted>" ;;
+            [Aa][Dd][Dd]*[Tt][Oo][Kk][Ee][Nn]*) log_cmd="ADD TOKEN <redacted>" ;;
+            [Rr][Ee][Mm][Oo][Vv][Ee]*[Tt][Oo][Kk][Ee][Nn]*) log_cmd="REMOVE TOKEN <redacted>" ;;
         esac
         log "mail prikaz od $from: $log_cmd"
         CMD_REPLY=""
