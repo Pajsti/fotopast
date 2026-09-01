@@ -64,7 +64,8 @@ assert_eq "A: automaticka fotka JE v sent_list.txt"     "$(sent_list_has "110000
 subproc_fixture_teardown
 
 # =====================================================================
-# Scenar B: MAX_SEND_PER_WAKE=2, 2 vyzadane + 2 automaticke (celkem 4
+# Scenar B: MAX_SEND_PER_WAKE=2 (a s nim i REQUEST_MAX=2, jinak by
+# load_config strop zvedl zpet na REQUEST_MAX), 2 vyzadane + 2 automaticke (celkem 4
 # unikatni kandidati bez prekryvu) - strop plati DOHROMADY, vyzadane
 # maji prednost (jsou v seznamu prvni) => posle se JEN 2, obe vyzadane,
 # zadna automaticka se nedostane ani k pokusu o odeslani.
@@ -92,7 +93,8 @@ assert_eq "B: sent_list.txt zustava prazdny (obe odeslane byly vyzadane)" \
 subproc_fixture_teardown
 
 # =====================================================================
-# Scenar C: MAX_SEND_PER_WAKE=3, 2 vyzadane + 3 automaticke (5 unikatnich
+# Scenar C: MAX_SEND_PER_WAKE=3 (REQUEST_MAX taky 3, viz scenar B),
+# 2 vyzadane + 3 automaticke (5 unikatnich
 # kandidatu, strop 3) - overuje, ze strop je SPOLECNY pro obe kategorie
 # (ne 3 vyzadane + 3 automaticke zvlast): posle se 2 vyzadane + JEN 1
 # automaticka (ne vsechny 3 automaticke).

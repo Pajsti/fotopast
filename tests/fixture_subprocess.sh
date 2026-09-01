@@ -25,14 +25,21 @@
 # pozadi-beziciho procesu (napr. `sleep 600 &`), aby `kill -STOP/-CONT`
 # mely co delat a nehlasily chybu na neexistujici PID.
 
-# subproc_fixture_setup <MAX_SEND_PER_WAKE>
+# subproc_fixture_setup <MAX_SEND_PER_WAKE> [REQUEST_MAX]
 # Vytvori $FIX/hunter (kopie hunter.sh+lib, s prepsanym SDCARD),
 # $FIX/sdcard (SDCARD), fake bin/ nastroje vracejici "nic se nedeje"
 # vychozi hodnoty (zadne SMS, zadny mail, ubia_first nebezi). Konkretni
 # scenar (mail_listing.txt, sms_listing.txt, snapky) si doplni volajici
 # test sam pred volanim subproc_run_hunter.
+#
+# REQUEST_MAX je parametr, protoze load_config vynucuje invariant
+# MAX_SEND_PER_WAKE >= REQUEST_MAX (viz lib/common.sh) - scenar, ktery
+# chce testovat NIZKY strop na probuzeni, musi snizit i REQUEST_MAX,
+# jinak by mu load_config strop zvedl zpatky. Vychozi hodnota je stejna
+# jako strop, aby fixture nikdy invariant neporusila sama od sebe.
 subproc_fixture_setup() {
     max_send="${1:-3}"
+    req_max="${2:-$max_send}"
 
     SROOT=$(cd "$(dirname "$0")/.." && pwd)
     FIX=$(mktemp -d)
@@ -61,7 +68,7 @@ AT_PORT=/dev/null
 AT_BAUD=115200
 SNAP_WAIT=1
 MAX_SEND_PER_WAKE=$max_send
-REQUEST_MAX=5
+REQUEST_MAX=$req_max
 RUN_DEADLINE=30
 EOF
 

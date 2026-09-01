@@ -172,6 +172,15 @@ load_config() {
     : "${IMAP_PORT:=993}"
     : "${TOKEN_FILE:=$HUNTER_DIR/mail.token}"
 
+    # Vyzadane fotky jdou v davce prvni; kdyby byl strop nizsi nez
+    # REQUEST_MAX, vytlacily by automaticke kandidaty a cast vyzadanych by
+    # se ztratila (REQUESTED_SNAPS se mezi probuzenimi neuchovava) - a to
+    # tise, protoze odpoved uzivateli uz rekla "SENDING N". Pravidlo je
+    # popsane v config.txt.example i v CHECKLISTu; tady se opravdu
+    # vynucuje, at uz ho porusi vychozi hodnoty nebo rucne editovany
+    # config.
+    [ "$MAX_SEND_PER_WAKE" -lt "$REQUEST_MAX" ] && MAX_SEND_PER_WAKE="$REQUEST_MAX"
+
     for req in SMTP_HOST SMTP_PORT SMTP_USER SMTP_TO AT_PORT; do
         eval "val=\${$req:-}"
         if [ -z "$val" ]; then

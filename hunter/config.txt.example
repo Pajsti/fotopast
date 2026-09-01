@@ -76,7 +76,8 @@ SNAP_WAIT=25
 # Kolik fotografii nejvyse odeslat za jedno probuzeni (ochrana baterie
 # pri velkem nedodelku). Musi byt aspon tak velke jako REQUEST_MAX -
 # vyzadane fotky (LAST/DATE/GET) jsou v odesilaci davce prvni, takze by
-# jinak vytlacily automaticky nalezene kandidaty.
+# jinak vytlacily automaticky nalezene kandidaty. load_config si to
+# pohlida: nizsi hodnota se pri nacteni tise zvedne na REQUEST_MAX.
 MAX_SEND_PER_WAKE=8
 
 # Tvrdy strop celeho behu hunter.sh. Po vyprseni se beh bezpodminecne
