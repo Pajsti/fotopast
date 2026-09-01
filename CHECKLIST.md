@@ -108,6 +108,64 @@ nic neposílá na UART.)
 - [ ] `cat log.txt` po každém probuzení — chceš vidět opakovanou
       spolehlivost, ne jen jeden úspěch.
 
+## Fáze 8 — aktualizace: e-mailové příkazy (2026-09-01)
+
+Tahle fáze se dělá na zařízení, které už fázemi 0–7 prošlo a **běží
+naostro** (`ubia_test` se spouští samo při každém probuzení, fotky už
+chodí mailem). Nejde o novou instalaci — jen o doplnění příkazového
+kanálu na existující nasazení. SMS z fáze 5 se přeskakuje natrvalo:
+`AT+CLAC` na tomhle modemu (SIMCom A7670E-MNXY) prokázal, že SMS
+příkazy nejsou ve firmwaru vůbec, takže fáze 5 je bezpředmětná.
+
+- [ ] **Zastavit appku na dobu úpravy** — `sh /tmp/mnt/sdcard/hunter/dev-stop.sh 600`
+      (stejný postup jako ve fázi 2).
+- [ ] Vytáhnout kartu, **fyzicky přes čtečku** zkopírovat (přes UART
+      neposílat — binárky jsou velké a textové soubory ztrácí
+      tabulátory, viz [pi-tools/README.md](pi-tools/README.md)):
+  - `hunter/bin/mailrecv` (nový)
+  - `hunter/bin/mailsend` (přeložený nanovo po refaktoru na `tlsnet`)
+  - `hunter/lib/command.sh`, `hunter/lib/mailcmd.sh` (nové)
+  - `hunter/lib/common.sh`, `hunter/lib/mail.sh`, `hunter/lib/sms.sh`,
+    `hunter/hunter.sh` (upravené)
+- [ ] Na kartě založit `hunter/mail.token` — jeden token na řádek,
+      každý aspoň 8 znaků, žádné mezery:
+  ```sh
+  echo 'muj-tajny-token-min-8-znaku' > /tmp/mnt/sdcard/hunter/mail.token
+  ```
+- [ ] Doplnit do `hunter/config.txt` nové klíče (vzor v
+      [hunter/config.txt.example](hunter/config.txt.example)):
+      `IMAP_HOST`, `IMAP_PORT` (993), `MAIL_MASTERS`, `AUTH_TYPE`
+      (výchozí `TOKEN`), `REQUEST_MAX` (výchozí 5). `MAX_SEND_PER_WAKE`
+      zvýšit na aspoň `REQUEST_MAX`, jinak by vyžádané fotky mohly
+      vytlačit automatické (výchozí v example je teď 8).
+- [ ] Kartu vrátit, připojit `uartlog`.
+- [ ] **Ověřit integritu po zkopírování** — `md5sum` na kartě proti
+      `md5sum` stejných souborů na build stroji. `sh -n` nestačí,
+      poškozený soubor může být pořád syntakticky platný (viz historie
+      téhle relace — přenos přes UART jednou takhle poškodil dva
+      soubory beze změny velikosti souboru na první pohled).
+- [ ] **Ověřit `mailrecv` přímo na zařízení:**
+      ```sh
+      /tmp/mnt/sdcard/hunter/bin/mailrecv imap.seznam.cz 993 \
+        <smtp_user> --pass-file /tmp/mnt/sdcard/hunter/smtp.pass list unseen
+      ```
+      Očekávej prázdno nebo `UIDVALIDITY|...`/`MSG|...` řádky. `Exec
+      format error` = špatné ABI, zkontroluj `-mfp32` a cross-compiler.
+- [ ] **Ostrý test kanálu:** pošli z autorizované adresy mail s
+      předmětem `HUNTER <tvuj-token> LIST CMD`, pak ručně
+      `sh /tmp/mnt/sdcard/hunter/hunter.sh`. Zkontroluj:
+  - `log.txt` má `mail prikaz od <adresa>: LIST CMD`
+  - `log.txt` **neobsahuje** hodnotu tokenu (`grep '<token>' log.txt`
+    prázdné)
+  - odpověď s předmětem `HUNTER reply` dorazila a **neobsahuje**
+    hodnotu tokenu
+  - zkus i `HUNTER <token> LAST 2` — dorazí dvě fotky
+- [ ] **Ověřit, že cizí pošta zůstává nedotčená** — pošli běžný mail
+      bez prefixu `HUNTER `, spusť `hunter.sh`, zkontroluj že zpráva
+      zůstala ve schránce **nepřečtená**.
+- [ ] `sh /tmp/mnt/sdcard/hunter/dev-resume.sh` (reboot), sledovat pár
+      přirozených probuzení stejně jako ve fázi 7.
+
 ## Prvních pár dní sledovat
 
 - [ ] Žádné neočekávané restarty (smyčka resetů = watchdog problém).
@@ -121,5 +179,11 @@ nic neposílá na UART.)
 ## Otevřené otázky, které tenhle checklist NEřeší
 
 Viz [docs/superpowers/specs/2026-08-27-hunter-design.md](docs/superpowers/specs/2026-08-27-hunter-design.md#11-otevřené-body--ověřit-na-zařízení),
-sekce 11 — zejména bod 3 (probuzení přes SMS) je samostatný test, ne
-součást téhle checklisty; dá se dělat souběžně, kdykoli po fázi 7.
+sekce 11 — většina bodů je od 2026-08-31 vyřešená přímo na zařízení
+(AT port, `AT+CSQ`, `SIGSTOP`+`stopWdg`, baterie přes `AT+CBC`, SMS
+probuzení je trvale bezpředmětné). Zbývají hlavně `FOTO` (vyvolání
+snímku) a chování `ubia_record.db` při mazání fotek.
+
+Fáze 8 (e-mailové příkazy) má vlastní spec a implementační plán:
+[2026-08-31-hunter-mail-commands-design.md](docs/superpowers/specs/2026-08-31-hunter-mail-commands-design.md)
+a [2026-08-31-hunter-mail-commands.md](docs/superpowers/plans/2026-08-31-hunter-mail-commands.md).

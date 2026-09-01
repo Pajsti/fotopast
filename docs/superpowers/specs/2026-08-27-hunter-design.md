@@ -275,6 +275,22 @@ baterii. Zbytek počká.
 
 ## 7. SMS příkazy
 
+> **Nahrazeno 2026-09-01.** Sekce 7.6 níže dokumentuje, jak se na tomto
+> modemu (SIMCom A7670E-MNXY) prokázalo přes `AT+CLAC`, že SMS příkazy
+> ve firmwaru vůbec nejsou — ne otázka SIM karty ani portu. Příkazový
+> kanál, který tahle sekce navrhovala, teď existuje jako **e-mailový**
+> kanál — viz
+> [2026-08-31-hunter-mail-commands-design.md](2026-08-31-hunter-mail-commands-design.md)
+> a jeho implementační plán
+> [2026-08-31-hunter-mail-commands.md](../plans/2026-08-31-hunter-mail-commands.md).
+> Kód `sms.sh`/`smsrecv`/`smssend` zůstává v repozitáři (degraduje
+> bezpečně — `process_sms` prostě nic nenajde a vrátí se) a začne
+> fungovat sám, pokud se modul někdy vymění za variantu s SMS. Zbytek
+> téhle sekce je ponechán jako záznam původního návrhu a důvodů, proč
+> vypadá tak, jak vypadá — nový kanál z něj vychází (stejný vykonavač
+> příkazů, stejná dedup-před-vykonáním logika, stejná filozofie
+> "neautorizovanému se neodpovídá").
+
 ### 7.1 Průběh
 
 ```
