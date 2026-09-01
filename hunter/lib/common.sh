@@ -340,7 +340,7 @@ add_mail_master() {
 # stejny duvod, pro ktery uz existuje pojistka u posledniho tokenu
 # (remove_token v lib/command.sh), tady je dopad dokonce vetsi: ztrata
 # posledniho tokenu nechava aspon rezim SENDER, ztrata posledni adresy
-# neuzavre nic.
+# nenechava zadnou cestu zpet.
 #
 # NOT_FOUND se hlasi zvlast, aby "odebral jsem neco jineho, nez jsem
 # myslel" nevypadalo jako uspech - drive funkce hlasila REMOVED i kdyz

@@ -435,7 +435,7 @@ execute_command() {
             # cokoli mimo tenhle znakovy rozsah by tam bylo spustitelne
             # (`;`, `$(...)`, backtick) nebo by soubor rozbilo tak, ze uz by
             # se nenacetl vubec (osamocena uvozovka/zavorka) - a to je na
-            # nedostupnem zarizeni trvale cihnuti. Tvarovy `case` nize je
+            # nedostupnem zarizeni trvale rozbiti. Tvarovy `case` nize je
             # jen kontrola TVARU, ne znaku, takze filtrovat je treba TADY.
             # Mezera je zamerne mimo rozsah: cislo se pise bez mezer
             # (+420603284430) nebo s pomlckami, ktere rozsah povoluje.
