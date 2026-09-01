@@ -71,10 +71,6 @@ process_mail() {
 '; continue
         fi
 
-        # Az ted je jiste, ze je co delat - zmrazit aplikaci, aby
-        # zarizeni nezhaslo uprostred zpracovani.
-        ensure_app_frozen
-
         printf '%s\n' "$key" >> "$STATE_DIR/mail_seen.txt"
         sync
 
@@ -89,7 +85,23 @@ process_mail() {
 '; continue
         fi
 
-        log "mail prikaz od $from: $AUTH_CMD"
+        # Az ted je jiste, ze se prikaz opravdu vykona - zmrazit aplikaci,
+        # aby zarizeni nezhaslo uprostred zpracovani. Zamerne AZ PO
+        # authorize_mail, ne hned po dedup kontrole - jinak by se
+        # zmrazovalo i pro zpravy, ktere se nakonec vubec nevykonaji
+        # (neautorizovany odesilatel, spatny token).
+        ensure_app_frozen
+
+        # AUTH_CMD muze obsahovat hodnotu tokenu jako ARGUMENT prikazu
+        # (ADD TOKEN <novy>/REMOVE TOKEN <stary>), ne jen jako auth-prefix -
+        # ten uz authorize_mail odriznul. Do logu jde jen redigovana kopie;
+        # execute_command dole dostava porad puvodni, neredigovany AUTH_CMD.
+        log_cmd="$AUTH_CMD"
+        case "$AUTH_CMD" in
+            [Aa][Dd][Dd]" "[Tt][Oo][Kk][Ee][Nn]" "*) log_cmd="ADD TOKEN <redacted>" ;;
+            [Rr][Ee][Mm][Oo][Vv][Ee]" "[Tt][Oo][Kk][Ee][Nn]" "*) log_cmd="REMOVE TOKEN <redacted>" ;;
+        esac
+        log "mail prikaz od $from: $log_cmd"
         CMD_REPLY=""
         execute_command "$AUTH_CMD" "$AUTH_HAS_TOKEN"
 

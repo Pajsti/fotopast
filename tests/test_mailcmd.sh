@@ -70,6 +70,36 @@ QUALITY=HD
 process_mail
 assert_eq "po zmene UIDVALIDITY se vykona" "$QUALITY" "LOW"
 
+# --- ADD TOKEN pres mail: nova hodnota tokenu se NIKDY nezaloguje, ale
+#     execute_command ji porad dostane a opravdu ji prida ---
+printf 'UIDVALIDITY|999\nMSG|404|paja.stindl@seznam.cz|HUNTER tajnytoken1 ADD TOKEN novytoken99\n' > "$FIX/listing.txt"
+: > "$FIX/seen.log"; : > "$FIX/sent.log"
+process_mail
+assert_contains    "ADD TOKEN se opravdu provede (execute_command dostal neredigovany AUTH_CMD)" "$(cat "$TOKEN_FILE")" "novytoken99"
+assert_not_contains "hodnota noveho tokenu se nezaloguje"       "$(cat "$LOG_FILE")" "novytoken99"
+assert_contains     "log obsahuje redigovanou znacku ADD TOKEN" "$(cat "$LOG_FILE")" "ADD TOKEN <redacted>"
+
+# --- REMOVE TOKEN pres mail: odebirana hodnota tokenu se NIKDY nezaloguje ---
+printf 'UIDVALIDITY|999\nMSG|505|paja.stindl@seznam.cz|HUNTER tajnytoken1 REMOVE TOKEN novytoken99\n' > "$FIX/listing.txt"
+: > "$FIX/seen.log"; : > "$FIX/sent.log"
+process_mail
+assert_not_contains "novytoken99 opravdu odebran z mail.token"     "$(cat "$TOKEN_FILE")" "novytoken99"
+assert_not_contains "hodnota odebirane ho tokenu se nezaloguje"    "$(cat "$LOG_FILE")" "novytoken99"
+assert_contains     "log obsahuje redigovanou znacku REMOVE TOKEN" "$(cat "$LOG_FILE")" "REMOVE TOKEN <redacted>"
+
+# --- ensure_app_frozen se vola AZ PO uspesne autorizaci: v davce se
+#     3 zpravami (bez prefixu / neautorizovany odesilatel / legitimni)
+#     se smi zmrazit jen 1x ---
+FREEZE_COUNT=0
+ensure_app_frozen() { FREEZE_COUNT=$((FREEZE_COUNT + 1)); FROZEN=1; }
+printf 'UIDVALIDITY|999\nMSG|606|kdokoli@example.com|Newsletter: bez prefixu\nMSG|707|cizi@example.com|HUNTER tajnytoken1 STATUS\nMSG|808|paja.stindl@seznam.cz|HUNTER tajnytoken1 STATUS\n' > "$FIX/listing.txt"
+: > "$FIX/seen.log"; : > "$FIX/sent.log"
+process_mail
+assert_eq           "zmrazeni jen 1x v davce s 1 legitimni zpravou ze 3" "$FREEZE_COUNT" "1"
+assert_contains     "legitimni zprava oznacena precteno"                "$(cat "$FIX/seen.log")" "808"
+assert_contains     "neautorizovany taky oznacen precteno"              "$(cat "$FIX/seen.log")" "707"
+assert_not_contains "zprava bez prefixu NENI oznacena precteno"         "$(cat "$FIX/seen.log")" "606"
+
 # --- token se nikde nezaloguje (kumulativne za cely beh testu) ---
 assert_not_contains "log souboru neobsahuje token" "$(cat "$LOG_FILE")" "tajnytoken1"
 
