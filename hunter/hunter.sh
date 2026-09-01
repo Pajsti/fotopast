@@ -72,6 +72,28 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM HUP
 
+# ensure_app_frozen
+# Idempotentni: zmrazi ubia_first nejvys jednou za beh. Volaji ji VSECHNA
+# mista, ktera potrebuji zarizeni drzet naziv - process_sms, process_mail
+# i fotkova vetev. Diky idempotenci se muze volat kolikrat chce.
+#
+# Volat az ve chvili, kdy je JISTE, ze je co delat - pri probuzeni, kdy
+# neni zadny prikaz ani fotka, se nemrazi vubec a zarizeni usne normalne.
+#
+# Signal se vola JMENEM (-STOP), nikdy cislem - MIPS ma jina cisla.
+ensure_app_frozen() {
+    [ "$STOPPED_APP" = 1 ] && return 0
+    APP_PID=$(pidof ubia_first)
+    if [ -z "$APP_PID" ]; then
+        log "VAROVANI: ubia_first neni v ps, pokracuji bez SIGSTOP"
+        return 0
+    fi
+    kill -STOP "$APP_PID"
+    STOPPED_APP=1
+    log "ubia_first (pid $APP_PID) zmrazen"
+    return 0
+}
+
 # vnejsi pojistka: kdyby hlavni beh z nejakeho duvodu neskoncil do
 # RUN_DEADLINE, ukonci ho natvrdo. Vlastni C nastroje (atcmd/smssend/
 # smsrecv/mailsend) uz maji vlastni timeouty na kazde operaci - tohle je
@@ -91,19 +113,60 @@ wait_for_at_port
 sync_clock_from_modem
 
 process_sms
+process_mail
 
 snap_list=$(wait_for_candidates)
 
-if [ -n "$snap_list" ]; then
-    APP_PID=$(pidof ubia_first)
+# Vyzadane fotky (LAST/DATE/GET) se pripoji k automatickym kandidatum,
+# aby se mrazilo jen jednou a poslalo v jedne davce.
+#
+# POZOR na prekryv: vyzadana fotka, ktera jeste NEBYLA odeslana, je
+# soucasne platnym automatickym kandidatem - find_ready_candidates (viz
+# lib/mail.sh) ji najde take, protoze hleda vsechno mimo sent_list.txt a
+# o vyzadani nic nevi. Bez odstraneni duplicit by se stejna cesta
+# objevila v $snap_list dvakrat, poslala by se e-mailem dvakrat a KAZDA
+# kopie by se (spravne, viz case nize) vynechala ze sent_list.txt,
+# protoze matchuje REQUESTED_SNAPS - vysledkem by byl duplicitni e-mail
+# a fotka navzdy oznacovana jako "neodeslana" pro automatiku (dokud by ji
+# nekdo znovu nevyzadal). Proto se z automatickeho seznamu pred spojenim
+# odstrani kazdy radek, ktery uz je mezi vyzadanymi.
+if [ -n "$REQUESTED_SNAPS" ] && [ -n "$snap_list" ]; then
+    dedup_list=""
+    old_ifs="$IFS"
+    IFS='
+'
+    for cand in $snap_list; do
+        IFS="$old_ifs"
+        case "
+$REQUESTED_SNAPS" in
+            *"
+$cand"*) IFS='
+'; continue ;;
+        esac
+        if [ -z "$dedup_list" ]; then
+            dedup_list="$cand"
+        else
+            dedup_list="$dedup_list
+$cand"
+        fi
+        IFS='
+'
+    done
+    IFS="$old_ifs"
+    snap_list="$dedup_list"
+fi
 
-    if [ -n "$APP_PID" ]; then
-        kill -STOP "$APP_PID"
-        STOPPED_APP=1
-        log "ubia_first (pid $APP_PID) zmrazen"
+if [ -n "$REQUESTED_SNAPS" ]; then
+    if [ -n "$snap_list" ]; then
+        snap_list="$REQUESTED_SNAPS
+$snap_list"
     else
-        log "VAROVANI: ubia_first neni v ps, pokracuji bez SIGSTOP"
+        snap_list="$REQUESTED_SNAPS"
     fi
+fi
+
+if [ -n "$snap_list" ]; then
+    ensure_app_frozen
 
     sent=0
     old_ifs="$IFS"
@@ -112,10 +175,20 @@ if [ -n "$snap_list" ]; then
     for snap in $snap_list; do
         IFS="$old_ifs"
         [ "$sent" -ge "$MAX_SEND_PER_WAKE" ] && break
+        [ -f "$snap" ] || { IFS='
+'; continue; }
 
         if send_snap "$snap"; then
-            printf '%s\n' "$snap" >> "$STATE_DIR/sent_list.txt"
-            sync
+            # Do sent_list.txt patri jen automaticky odeslane snimky.
+            # Vyzadane se tam nezapisuji - jinak by se pri prvnim
+            # vyzadani oznacily za odeslane a uz by nikdy neodesly
+            # automaticky.
+            case "
+$REQUESTED_SNAPS" in
+                *"
+$snap"*) ;;
+                *) printf '%s\n' "$snap" >> "$STATE_DIR/sent_list.txt"; sync ;;
+            esac
             sent=$((sent + 1))
             log "odeslano: $snap"
         else

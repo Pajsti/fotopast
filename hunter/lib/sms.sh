@@ -56,6 +56,8 @@ process_sms() {
             continue
         fi
 
+        ensure_app_frozen
+
         printf '%s\n' "$key" >> "$STATE_DIR/sms_seen.txt"
         sync
 

@@ -74,8 +74,10 @@ AT_BAUD=115200
 SNAP_WAIT=25
 
 # Kolik fotografii nejvyse odeslat za jedno probuzeni (ochrana baterie
-# pri velkem nedodelku).
-MAX_SEND_PER_WAKE=3
+# pri velkem nedodelku). Musi byt aspon tak velke jako REQUEST_MAX -
+# vyzadane fotky (LAST/DATE/GET) jsou v odesilaci davce prvni, takze by
+# jinak vytlacily automaticky nalezene kandidaty.
+MAX_SEND_PER_WAKE=8
 
 # Tvrdy strop celeho behu hunter.sh. Po vyprseni se beh bezpodminecne
 # uklidi a ukonci, i kdyby nic neodeslal.
