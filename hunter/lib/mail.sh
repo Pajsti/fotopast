@@ -126,3 +126,18 @@ send_snap() {
         --tls "$SMTP_TLS" \
         >> "$LOG_FILE" 2>&1
 }
+
+# send_reply_mail <komu> <text>
+# Odpoved na prikaz. Predmet je VZDY "HUNTER reply" - prichozi predmet
+# se NIKDY necituje, protoze je v nem token.
+send_reply_mail() {
+    to="$1"
+    text="$2"
+    "$HUNTER_DIR/bin/mailsend" \
+        --host "$SMTP_HOST" --port "$SMTP_PORT" \
+        --user "$SMTP_USER" --pass-file "$HUNTER_DIR/smtp.pass" \
+        --to "$to" --subject "HUNTER reply" \
+        --body "$text" \
+        --tls "$SMTP_TLS" \
+        >> "$LOG_FILE" 2>&1
+}

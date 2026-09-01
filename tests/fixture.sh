@@ -39,6 +39,10 @@ EOF
 
     printf 'tajnytoken1\n' > "$TOKEN_FILE"
 
+    # smtp.pass - process_mail() ho vyzaduje jako podminku, ze je e-mail
+    # vubec nakonfigurovany (viz hunter/lib/mailcmd.sh).
+    printf 'fakepass\n' > "$HUNTER_DIR/smtp.pass"
+
     # fake snapready: vsechno je "pripravene"
     printf '#!/bin/sh\nexit 0\n' > "$HUNTER_DIR/bin/snapready"
     chmod +x "$HUNTER_DIR/bin/snapready"
@@ -52,6 +56,7 @@ EOF
     . "$ROOT/hunter/lib/status.sh"
     . "$ROOT/hunter/lib/mail.sh"
     . "$ROOT/hunter/lib/command.sh"
+    . "$ROOT/hunter/lib/mailcmd.sh"
 
     load_config
 }
