@@ -431,6 +431,17 @@ execute_command() {
         [Aa][Dd][Dd]" "*)
             if [ "$has_token" != 1 ]; then CMD_REPLY='TOKEN REQUIRED'; return 0; fi
             tgt=$(trim "${cmd#* }")
+            # Hodnota konci v config.txt, ktery load_config nacita pres `.` -
+            # cokoli mimo tenhle znakovy rozsah by tam bylo spustitelne
+            # (`;`, `$(...)`, backtick) nebo by soubor rozbilo tak, ze uz by
+            # se nenacetl vubec (osamocena uvozovka/zavorka) - a to je na
+            # nedostupnem zarizeni trvale cihnuti. Tvarovy `case` nize je
+            # jen kontrola TVARU, ne znaku, takze filtrovat je treba TADY.
+            # Mezera je zamerne mimo rozsah: cislo se pise bez mezer
+            # (+420603284430) nebo s pomlckami, ktere rozsah povoluje.
+            case "$tgt" in
+                *[!A-Za-z0-9@._+-]*) CMD_REPLY='ADD: INVALID TARGET'; return 0 ;;
+            esac
             case "$tgt" in
                 +[0-9]*) add_master "$(normalize_phone "$tgt")"
                          CMD_REPLY="ADDED $tgt" ;;
@@ -443,6 +454,11 @@ execute_command() {
         [Rr][Ee][Mm][Oo][Vv][Ee]" "*)
             if [ "$has_token" != 1 ]; then CMD_REPLY='TOKEN REQUIRED'; return 0; fi
             tgt=$(trim "${cmd#* }")
+            # Stejny znakovy filtr jako u ADD - i REMOVE zapisuje zpatky do
+            # config.txt (prepisuje cely radek MASTERS=/MAIL_MASTERS=).
+            case "$tgt" in
+                *[!A-Za-z0-9@._+-]*) CMD_REPLY='REMOVE: INVALID TARGET'; return 0 ;;
+            esac
             case "$tgt" in
                 +[0-9]*) remove_master "$(normalize_phone "$tgt")"
                          CMD_REPLY="REMOVED $tgt" ;;

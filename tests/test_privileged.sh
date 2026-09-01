@@ -99,6 +99,71 @@ assert_contains "cislo v MASTERS" "$MASTERS" "+420111222333"
 CMD_REPLY=""; execute_command "ADD nesmysl" 1
 assert_eq "neplatny argument" "$CMD_REPLY" "ADD: INVALID TARGET"
 
+# =====================================================================
+# UTOCNE TESTY: vstrikovani do config.txt pres ADD/REMOVE.
+#
+# config.txt nacita load_config pres `.`, takze cokoli, co se do nej
+# zapise, se pri pristim behu VYKONA jako shell. Tvarovy case (+[0-9]* /
+# *@*.*) je kontrola TVARU, ne znaku - "e@x.cz;touch /tmp/x" mu vyhovi.
+# Proto je pred nim znakovy filtr, ktery se tady overuje: prikaz musi
+# skoncit na INVALID TARGET, do configu se nesmi dostat nic, a config
+# musi zustat nacitatelny (`.` na nem projde).
+# =====================================================================
+
+config_sourceable() {
+    ( . "$CONFIG_FILE" ) >/dev/null 2>&1 && printf '1' || printf '0'
+}
+
+INJ_MARK="$FIX/pwned"
+
+CMD_REPLY=""; execute_command "ADD a@b.cz;touch $INJ_MARK" 1
+assert_eq "ADD s ';' odmitnut" "$CMD_REPLY" "ADD: INVALID TARGET"
+assert_not_contains "vstrikovany text se nedostal do configu" "$(cat "$CONFIG_FILE")" "touch"
+assert_not_contains "vstrikovany text neni ani v MAIL_MASTERS v pameti" "$MAIL_MASTERS" "touch"
+assert_eq "config.txt zustava nacitatelny po pokusu o ';'" "$(config_sourceable)" "1"
+# a opravdu nic nespustil (marker by vytvoril `touch` pri sourcovani)
+( . "$CONFIG_FILE" ) >/dev/null 2>&1
+[ -e "$INJ_MARK" ] && r=1 || r=0
+assert_eq "sourcovani configu nic nespustilo" "$r" "0"
+
+# telefonni tvar: "+4;touch ..." projde vzorem +[0-9]* a normalize_phone
+# by z nej udelal "+4;touch/tmp/..." - porad spustitelne
+CMD_REPLY=""; execute_command "ADD +4;touch $INJ_MARK" 1
+assert_eq "ADD telefonniho tvaru s ';' odmitnut" "$CMD_REPLY" "ADD: INVALID TARGET"
+assert_not_contains "vstrikovany telefonni text neni v MASTERS" "$MASTERS" "touch"
+assert_eq "config.txt nacitatelny i po telefonnim pokusu" "$(config_sourceable)" "1"
+
+# $(...) a backtick - `.` provadi na prave strane prirazeni plnou expanzi
+CMD_REPLY=""; execute_command "ADD a@b.cz\$(id)" 1
+assert_eq "ADD s \$( ) odmitnut" "$CMD_REPLY" "ADD: INVALID TARGET"
+CMD_REPLY=""; execute_command "ADD a@b.cz\`id\`" 1
+assert_eq "ADD s backtickem odmitnut" "$CMD_REPLY" "ADD: INVALID TARGET"
+
+# DOSTUPNOST: jedina nesparovana uvozovka trvale rozbije config.txt tak,
+# ze uz ho load_config nikdy nenacte - a load_config bezi v hunter.sh
+# JESTE PRED instalaci trapu cleanup. Zadny utocnik k tomu neni potreba,
+# staci preklep opravneneho uzivatele.
+CMD_REPLY=""; execute_command "ADD oops@x.cz'" 1
+assert_eq "ADD s uvozovkou odmitnut" "$CMD_REPLY" "ADD: INVALID TARGET"
+assert_eq "config.txt nacitatelny i po uvozovce" "$(config_sourceable)" "1"
+
+# REMOVE zapisuje do config.txt take (prepisuje cely radek) - stejny filtr
+CMD_REPLY=""; execute_command "REMOVE a@b.cz;touch $INJ_MARK" 1
+assert_eq "REMOVE s ';' odmitnut" "$CMD_REPLY" "REMOVE: INVALID TARGET"
+assert_eq "config.txt nacitatelny i po pokusu pres REMOVE" "$(config_sourceable)" "1"
+
+# legitimni tvary MUSI porad projit (filtr nesmi byt prisnejsi, nez je
+# potreba) - adresa s tagem/pomlckou i cislo s pomlckami
+CMD_REPLY=""; execute_command "ADD user+tag@sub.domain-name.co.uk" 1
+assert_contains "adresa s '+' a '-' porad projde" "$CMD_REPLY" "ADDED"
+assert_contains "a opravdu se zapsala" "$(cat "$CONFIG_FILE")" "user+tag@sub.domain-name.co.uk"
+CMD_REPLY=""; execute_command "REMOVE user+tag@sub.domain-name.co.uk" 1
+assert_contains "a jde zase odebrat" "$CMD_REPLY" "REMOVED"
+
+CMD_REPLY=""; execute_command "ADD +420-603-284-431" 1
+assert_contains "cislo s pomlckami porad projde" "$CMD_REPLY" "ADDED"
+assert_contains "cislo se ulozilo normalizovane" "$MASTERS" "+420603284431"
+
 # --- prikazy bez zmeny opravneni token nevyzaduji (zpetna kompatibilita) ---
 CMD_REPLY=""; execute_command "QUALITY LOW" 0
 assert_eq "QUALITY beze tokenu porad funguje" "$CMD_REPLY" "QUALITY SET TO LOW"

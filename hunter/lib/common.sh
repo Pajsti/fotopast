@@ -112,6 +112,13 @@ atomic_write_file() {
 # Prepise (nebo prida) KLIC=HODNOTA v config.txt, ostatni radky beze
 # zmeny. Atomicky pres docasny soubor. `case` pattern matching resi
 # "najdi radek zacinajici na KLIC=" bez sed.
+#
+# POZOR - DUVERNI HRANICE: config.txt nacita load_config pres `.`, takze
+# argument HODNOTA se pri pristim behu VYHODNOTI JAKO SHELL. Kdo sem
+# pousti text od uzivatele (ADD/REMOVE v lib/command.sh), musi ho nejdriv
+# profiltrovat znakovym seznamem povolenych znaku - jinak je to spusteni
+# libovolneho prikazu, nebo (u nesparovane uvozovky) trvale rozbity
+# config, ktery uz nikdy nepujde nacist.
 set_config_value() {
     key="$1"
     val="$2"
