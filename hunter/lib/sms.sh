@@ -56,8 +56,6 @@ process_sms() {
             continue
         fi
 
-        ensure_app_frozen
-
         printf '%s\n' "$key" >> "$STATE_DIR/sms_seen.txt"
         sync
 
@@ -69,6 +67,13 @@ process_sms() {
 '
             continue
         fi
+
+        # Az ted je jiste, ze se prikaz opravdu vykona - zmrazit aplikaci,
+        # aby zarizeni nezhaslo uprostred zpracovani. Zamerne AZ PO
+        # is_master, ne hned po dedup kontrole - jinak by se zmrazovalo i
+        # pro SMS od neautorizovaneho cisla, ktere se nakonec vubec
+        # nevykona (stejna oprava jako u process_mail v Tasku 12).
+        ensure_app_frozen
 
         log "SMS od $from: $body"
         CMD_REPLY=""

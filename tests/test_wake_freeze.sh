@@ -105,4 +105,80 @@ assert_contains "bez ubia_first: foto se presto posle" \
 
 subproc_fixture_teardown
 
+# =====================================================================
+# Treti beh: neautorizovana SMS (cizi cislo, neni v MASTERS) SAMA O SOBE,
+# bez zadne dalsi prilezitosti zmrazit (zadny mail prikaz, zadna fotka) -
+# overuje opravu z revize Tasku 13 (mirror opravy z Tasku 12 pro
+# process_mail): ensure_app_frozen se v process_sms vola AZ PO uspesne
+# is_master kontrole, ne hned po dedup kontrole. Kdyby se volalo drive
+# (puvodni chyba), i cizi cislo, ktere se nakonec vubec nevykona, by
+# aplikaci zmrazilo - tenhle beh by to okamzite odhalil (FREEZE_COUNT by
+# bylo 1 misto 0).
+# =====================================================================
+subproc_fixture_setup 5
+subproc_use_real_pid
+cat > "$HDIR/bin/smsrecv" <<EOF
+#!/bin/sh
+for a in "\$@"; do
+  case "\$a" in
+    list) cat "$FIX/sms_listing.txt" 2>/dev/null; exit 0 ;;
+    del) shift; echo "\$@" >> "$FIX/sms_del.log"; exit 0 ;;
+  esac
+done
+exit 0
+EOF
+chmod +x "$HDIR/bin/smsrecv"
+# +420111222333 neni v MASTERS (fixtura ma jen +420603284430) - cizi cislo.
+printf 'MSG|1|REC UNREAD|+420111222333|26/08/28,21:00:00|STATUS\n' > "$FIX/sms_listing.txt"
+# zadny mail prikaz, zadna fotka - jedina prilezitost ke zmrazeni v tomhle
+# behu je (spravne odmitnuta) neautorizovana SMS.
+
+subproc_run_hunter
+
+assert_eq "samotna neautorizovana SMS NEZMRAZUJE (0x v logu)" "$(freeze_count)" "0"
+assert_contains "neautorizovane cislo bylo odmitnuto" \
+                 "$(cat "$HDIR/log.txt")" "SMS od neautorizovaneho cisla '+420111222333' odmitnuta"
+
+subproc_fixture_teardown
+
+# =====================================================================
+# Ctvrty beh: davka DVOU SMS v jednom process_sms volani - neautorizovana
+# (cizi cislo) NAJDE se pred autorizovanou v seznamu, autorizovana (STATUS)
+# az po ni. Mirror stavajiciho testu v tests/test_mailcmd.sh ("zmrazeni
+# jen 1x v davce s 1 legitimni zpravou ze 3"), ale na urovni SKUTECNEHO
+# behu hunter.sh (ne jen osamocene funkce s mockem). Diky treti beh vyse
+# uz vime, ze neautorizovana SMS sama o sobe prispiva 0 zmrazeni - takze
+# presne 1 zmrazeni v tehle davce lze pripsat vyhradne te autorizovane.
+# =====================================================================
+subproc_fixture_setup 5
+subproc_use_real_pid
+cat > "$HDIR/bin/smsrecv" <<EOF
+#!/bin/sh
+for a in "\$@"; do
+  case "\$a" in
+    list) cat "$FIX/sms_listing.txt" 2>/dev/null; exit 0 ;;
+    del) shift; echo "\$@" >> "$FIX/sms_del.log"; exit 0 ;;
+  esac
+done
+exit 0
+EOF
+chmod +x "$HDIR/bin/smsrecv"
+printf 'MSG|1|REC UNREAD|+420111222333|26/08/28,21:00:00|STATUS\nMSG|2|REC UNREAD|+420603284430|26/08/28,21:09:48|STATUS\n' \
+    > "$FIX/sms_listing.txt"
+# zadny mail prikaz, zadna fotka - jedina prilezitost ke zmrazeni v tomhle
+# behu je SMS vetev.
+
+subproc_run_hunter
+
+assert_eq "davka (neautorizovana + autorizovana SMS) -> presne 1 zmrazeni" \
+          "$(freeze_count)" "1"
+assert_contains "neautorizovana zprava v davce odmitnuta" \
+                 "$(cat "$HDIR/log.txt")" "SMS od neautorizovaneho cisla '+420111222333' odmitnuta"
+assert_contains "autorizovana zprava v davce se vykonala" \
+                 "$(cat "$HDIR/log.txt")" "SMS od +420603284430: STATUS"
+if kill -0 "$SUBPROC_REAL_PID" 2>/dev/null; then r=alive; else r=gone; fi
+assert_eq "aplikace po davce porad bezi (spravne odmrazena)" "$r" "alive"
+
+subproc_fixture_teardown
+
 finish
