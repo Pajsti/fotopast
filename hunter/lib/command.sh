@@ -482,11 +482,17 @@ execute_command() {
                 ''|*[!0-9]*) CMD_REPLY='LAST: INVALID COUNT'; return 0 ;;
             esac
             [ "$n" -lt 1 ] && { CMD_REPLY='LAST: INVALID COUNT'; return 0; }
+            # request_last -> request_add PREPISUJE globalni $n (zadna
+            # funkce v lib/ nescopuje promenne, `local` neni v POSIXu).
+            # Bez teto kopie by se nize porovnaval pocet uz pridanych
+            # polozek, ktery je z definice <= REQUEST_MAX, takze hlaska o
+            # oriznuti byla nedosazitelna.
+            want_n="$n"
             request_last "$n"
             got=$(request_count)
             if [ "$got" = 0 ]; then
                 CMD_REPLY='LAST: NOT FOUND'
-            elif [ "$n" -gt "$REQUEST_MAX" ]; then
+            elif [ "$want_n" -gt "$REQUEST_MAX" ]; then
                 CMD_REPLY="SENDING $got (capped at REQUEST_MAX=$REQUEST_MAX)"
             else
                 CMD_REPLY="SENDING $got"

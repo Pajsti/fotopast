@@ -7,6 +7,13 @@ fixture_setup
 fixture_snap 260828 210948
 fixture_snap 260828 220000
 fixture_snap 260829 080000
+# fotek musi byt VIC nez REQUEST_MAX (=5 ve fixture), jinak by se strop
+# nikdy nedosahl a test na oriznuti by byl bezobsazny - meril by jen
+# "kolik fotek na karte je". Dalsi den, aby test DATE 260828 nize porad
+# videl presne dve.
+fixture_snap 260830 010000
+fixture_snap 260830 020000
+fixture_snap 260830 030000
 
 count_lines() { printf '%s' "$1" | grep -c . ; }
 
@@ -16,10 +23,26 @@ execute_command "LAST 2" 1
 assert_eq "LAST 2 vrati 2 cesty" "$(count_lines "$REQUESTED_SNAPS")" "2"
 assert_contains "LAST odpoved" "$CMD_REPLY" "SENDING 2"
 
+# 6 fotek na karte, REQUEST_MAX=5 -> strop se OPRAVDU dosahne
 REQUESTED_SNAPS=""; CMD_REPLY=""
 execute_command "LAST 99" 1
-assert_eq "LAST nad strop orizne na REQUEST_MAX" \
-          "$(count_lines "$REQUESTED_SNAPS")" "3"
+assert_eq "LAST nad strop orizne presne na REQUEST_MAX" \
+          "$(count_lines "$REQUESTED_SNAPS")" "$REQUEST_MAX"
+# a odpoved to musi RICT - spec 3.5 ("Pri prekroceni se posle strop a
+# odpoved to rekne."). Drive to byl mrtvy kod: request_add prepisuje
+# globalni $n, takze se porovnaval pocet uz pridanych polozek, ktery je
+# z definice <= REQUEST_MAX, a podminka nemohla nikdy platit.
+assert_contains "LAST nad strop to rekne i v odpovedi" \
+                "$CMD_REPLY" "capped at REQUEST_MAX=$REQUEST_MAX"
+assert_contains "LAST nad strop hlasi skutecne odeslany pocet" \
+                "$CMD_REPLY" "SENDING $REQUEST_MAX"
+
+# hranice: PRESNE na strop uz oriznuti nenastalo, hlaska tam byt nesmi
+REQUESTED_SNAPS=""; CMD_REPLY=""
+execute_command "LAST 5" 1
+assert_eq "LAST presne na strop vrati REQUEST_MAX cest" \
+          "$(count_lines "$REQUESTED_SNAPS")" "$REQUEST_MAX"
+assert_not_contains "LAST presne na strop o oriznuti nemluvi" "$CMD_REPLY" "capped"
 
 REQUESTED_SNAPS=""; CMD_REPLY=""
 execute_command "LAST abc" 1
