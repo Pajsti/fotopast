@@ -164,6 +164,39 @@ CMD_REPLY=""; execute_command "ADD +420-603-284-431" 1
 assert_contains "cislo s pomlckami porad projde" "$CMD_REPLY" "ADDED"
 assert_contains "cislo se ulozilo normalizovane" "$MASTERS" "+420603284431"
 
+# =====================================================================
+# UTOCNE TESTY: odebrani POSLEDNI adresy z MAIL_MASTERS.
+#
+# Stejna trida chyby jako "posledni token": s prazdnym MAIL_MASTERS
+# vrati is_mail_master 1 pro kohokoli, takze authorize_mail selze pro
+# vsechny a v OBOU rezimech - a zadny prikaz uz nejde poslat, protoze
+# kazdy musi nejdriv projit autorizaci. Zpatky uz jen fyzicky ke karte.
+# Navic se drive hlasilo REMOVED i kdyz se nic neodebralo, takze
+# operator nemel signal, ze prave udelal neco nevratneho.
+# =====================================================================
+
+CMD_REPLY=""; execute_command "ADD druhy@example.com" 1
+assert_contains "druha adresa pridana" "$CMD_REPLY" "ADDED"
+
+# neexistujici adresa uz nesmi hlasit uspech
+CMD_REPLY=""; execute_command "REMOVE vubec.tam.neni@example.com" 1
+assert_contains "REMOVE neexistujici adresy hlasi NOT FOUND" "$CMD_REPLY" "MAIL MASTER NOT FOUND"
+assert_contains "seznam adres se nezmenil" "$MAIL_MASTERS" "druhy@example.com"
+
+# predposledni jde odebrat normalne
+CMD_REPLY=""; execute_command "REMOVE druhy@example.com" 1
+assert_contains "predposledni adresa jde odebrat" "$CMD_REPLY" "REMOVED"
+assert_eq "zbyva presne posledni adresa" "$MAIL_MASTERS" "paja.stindl@seznam.cz"
+
+# a ted ta posledni - musi byt odmitnuta
+CMD_REPLY=""; execute_command "REMOVE paja.stindl@seznam.cz" 1
+assert_eq "posledni adresa se odebrat NESMI" "$CMD_REPLY" "CANNOT REMOVE LAST MAIL MASTER"
+assert_eq "posledni adresa opravdu zustala v pameti" "$MAIL_MASTERS" "paja.stindl@seznam.cz"
+assert_contains "posledni adresa zustala i v configu" "$(cat "$CONFIG_FILE")" "MAIL_MASTERS=paja.stindl@seznam.cz"
+# a kanal je porad ovladatelny: pravoplatny majitel projde autorizaci
+authorize_mail "paja.stindl@seznam.cz" "HUNTER tajnytoken1 STATUS"
+assert_eq "majitel je po odmitnutem REMOVE porad autorizovan" "$AUTH_OK" "1"
+
 # --- prikazy bez zmeny opravneni token nevyzaduji (zpetna kompatibilita) ---
 CMD_REPLY=""; execute_command "QUALITY LOW" 0
 assert_eq "QUALITY beze tokenu porad funguje" "$CMD_REPLY" "QUALITY SET TO LOW"

@@ -463,7 +463,11 @@ execute_command() {
                 +[0-9]*) remove_master "$(normalize_phone "$tgt")"
                          CMD_REPLY="REMOVED $tgt" ;;
                 *@*.*)   remove_mail_master "$tgt"
-                         CMD_REPLY="REMOVED $tgt" ;;
+                         case "$REMOVE_MAIL_RESULT" in
+                             OK)        CMD_REPLY="REMOVED $tgt" ;;
+                             NOT_FOUND) CMD_REPLY="MAIL MASTER NOT FOUND: $tgt" ;;
+                             LAST)      CMD_REPLY='CANNOT REMOVE LAST MAIL MASTER' ;;
+                         esac ;;
                 *)       CMD_REPLY='REMOVE: INVALID TARGET' ;;
             esac
             ;;

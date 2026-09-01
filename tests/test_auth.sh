@@ -54,6 +54,19 @@ authorize_mail "" "HUNTER tajnytoken1 STATUS"
 assert_eq "TOKEN: prazdny odesilatel s osirelou carkou neprojde" "$AUTH_OK" "0"
 MAIL_MASTERS="paja.stindl@seznam.cz"
 
+# --- totez pro dvojce is_master (telefonni cisla) ---
+# S prazdnym MASTERS je obaleny retezec ",," a vzor *",,"* na nej sedne,
+# takze bez kontroly prazdneho vstupu by is_master "" vratilo uspech.
+MASTERS=""
+is_master "" && r=1 || r=0
+assert_eq "prazdne cislo s prazdnym MASTERS neprojde" "$r" "0"
+MASTERS="+420603284430,"
+is_master "" && r=1 || r=0
+assert_eq "prazdne cislo s osirelou carkou v MASTERS neprojde" "$r" "0"
+MASTERS="+420603284430"
+is_master "+420603284430" && r=1 || r=0
+assert_eq "skutecne cislo porad projde" "$r" "1"
+
 # --- sprava tokenu ---
 load_tokens
 assert_eq "pocet tokenu na zacatku" "$TOKEN_COUNT" "1"

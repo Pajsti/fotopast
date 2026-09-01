@@ -274,6 +274,10 @@ sync_clock_from_modem() {
 # pattern "*,cislo,*" nezachytil castecnou shodu (napr. "420" uvnitr
 # "1420999").
 is_master() {
+    # Prazdny vstup nesmi nikdy projit: se zapraznenym MASTERS by se
+    # obaleny retezec ",," porovnaval se vzorem *",,"* a sedl by. Stejna
+    # pojistka jako u dvojcete is_mail_master (viz lib/command.sh).
+    [ -n "$1" ] || return 1
     case ",$MASTERS," in
         *",$1,"*) return 0 ;;
         *) return 1 ;;
@@ -313,19 +317,46 @@ add_mail_master() {
     MAIL_MASTERS="$newval"
 }
 
+# remove_mail_master <adresa> -> REMOVE_MAIL_RESULT = OK|NOT_FOUND|LAST
+#
+# POSLEDNI adresu odebrat NELZE: se zapraznenym MAIL_MASTERS neprojde
+# autorizaci nikdo (is_mail_master vrati 1 pro cokoli) a to v OBOU
+# rezimech - jedinou cestou zpet by byl fyzicky pristup ke karte. Je to
+# stejny duvod, pro ktery uz existuje pojistka u posledniho tokenu
+# (remove_token v lib/command.sh), tady je dopad dokonce vetsi: ztrata
+# posledniho tokenu nechava aspon rezim SENDER, ztrata posledni adresy
+# neuzavre nic.
+#
+# NOT_FOUND se hlasi zvlast, aby "odebral jsem neco jineho, nez jsem
+# myslel" nevypadalo jako uspech - drive funkce hlasila REMOVED i kdyz
+# zadna adresa neodpovidala.
 remove_mail_master() {
     a=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
     newval=""
+    rm_found=0
     old_ifs="$IFS"
     IFS=','
     for m in $MAIL_MASTERS; do
-        [ "$m" = "$a" ] && continue
         [ -z "$m" ] && continue
+        rm_ml=$(printf '%s' "$m" | tr 'A-Z' 'a-z')
+        if [ "$rm_ml" = "$a" ]; then rm_found=1; continue; fi
         if [ -z "$newval" ]; then newval="$m"; else newval="$newval,$m"; fi
     done
     IFS="$old_ifs"
+
+    if [ "$rm_found" = 0 ]; then
+        REMOVE_MAIL_RESULT=NOT_FOUND
+        return 1
+    fi
+    if [ -z "$newval" ]; then
+        REMOVE_MAIL_RESULT=LAST
+        return 1
+    fi
+
     set_config_value MAIL_MASTERS "$newval"
     MAIL_MASTERS="$newval"
+    REMOVE_MAIL_RESULT=OK
+    return 0
 }
 
 # remove_master <cislo> - totez pro telefonni cisla
