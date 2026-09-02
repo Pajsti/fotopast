@@ -212,5 +212,11 @@ else
     log "nic k odeslani"
 fi
 
+# Posun cursoru az TED, po odeslani - prave odeslane soubory se tim do
+# uzavreni sveho dne zapocitaji hned. Jednou za probuzeni, ne uvnitr
+# find_ready_candidates: ta se vola opakovane z pollovaci smycky
+# wait_for_candidates (spec 2026-09-02, 3.3).
+cursor_advance
+
 log "=== hunter konec ==="
 exit 0

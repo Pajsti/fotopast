@@ -51,6 +51,75 @@ find_ready_candidates() {
     done
 }
 
+# day_fully_sent <YYMMDD>
+# 0, kdyz je KAZDY *.jpg toho dne v sent_list.txt.
+#
+# Ridi se VYHRADNE clenstvim v sent_list.txt, ne kandidaturou. Soubor,
+# ktery snapready odmita (neuplny, poskozeny), tedy den drzi otevreny -
+# schvalne: "neumim ho poslat" neni totez co "je vyrizeny"
+# (spec 2026-09-02, 3.2 a omezeni 9.3).
+day_fully_sent() {
+    _d="$1"
+    _nl='
+'
+    _slice=""
+    if [ -f "$STATE_DIR/sent_list.txt" ]; then
+        _slice=$(fgrep "/snaps/$_d/" "$STATE_DIR/sent_list.txt" 2>/dev/null)
+    fi
+
+    for _f in "$SDCARD/snaps/$_d"/*.jpg; do
+        [ -f "$_f" ] || continue
+        case "$_nl$_slice$_nl" in
+            *"$_nl$_f$_nl"*) ;;
+            *) return 1 ;;
+        esac
+    done
+    return 0
+}
+
+# cursor_advance
+# Posune cursor na nejstarsi den, ktery jeste neni cely odeslany -
+# nejvys ale na NEJNOVEJSI existujici den, ten se neuzavira nikdy.
+#
+# Podminka "existuje novejsi slozka dne" je zamerne strukturalni, ne
+# podle hodin: hodiny zarizeni nemaji zalohovany RTC a mezi probuzenimi
+# plavou (spec 2026-08-27, 2.1). Do nejnovejsi slozky se porad zapisuje,
+# takze rozepsany snimek nemuze propadnout.
+#
+# Cursor se nikdy neposouva ZPET - jen tak ma "tenhle den je vyrizeny"
+# trvalou platnost.
+cursor_advance() {
+    _newest=""
+    for _d in $(list_snap_days); do
+        snap_num6 "$_d" || continue
+        if [ -z "$_newest" ] || [ "$_d" -gt "$_newest" ]; then
+            _newest="$_d"
+        fi
+    done
+    [ -n "$_newest" ] || return 0
+
+    _open=""
+    for _d in $(list_snap_days); do
+        snap_num6 "$_d" || continue
+        [ "$_d" -ge "$_newest" ] && continue
+        day_fully_sent "$_d" && continue
+        if [ -z "$_open" ] || [ "$_d" -lt "$_open" ]; then
+            _open="$_d"
+        fi
+    done
+
+    if [ -n "$_open" ]; then
+        _new="$_open"
+    else
+        _new="$_newest"
+    fi
+
+    _cur=$(cursor_read)
+    [ -n "$_cur" ] && [ "$_new" -le "$_cur" ] && return 0
+    cursor_write "$_new"
+    log "cursor posunut na $_new"
+}
+
 # wait_for_candidates
 # Sjednocuje "dozenani nedodelku" a "cekani na novy snimek z tohoto
 # probuzeni" do jedine smycky: pri kazdem kole hleda kandidaty, a jakmile

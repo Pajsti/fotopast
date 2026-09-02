@@ -77,5 +77,52 @@ assert_not_contains "snapready odmitnuty soubor neni kandidat" "$out" "260830/01
 printf '#!/bin/sh\nexit 0\n' > "$HUNTER_DIR/bin/snapready"
 chmod +x "$HUNTER_DIR/bin/snapready"
 
+# =====================================================================
+# Posun cursoru (spec 2026-09-02, 3.2)
+# =====================================================================
+
+mark_sent() { printf '%s\n' "$1" >> "$STATE_DIR/sent_list.txt"; }
+
+: > "$STATE_DIR/sent_list.txt"
+cursor_write 260828
+
+# --- nic neodeslano -> cursor se nehne ---
+cursor_advance
+assert_eq "bez odeslani se cursor nehne" "$(cursor_read)" "260828"
+
+# --- day_fully_sent ---
+assert_eq "nedoslany den neni fully_sent" "$(day_fully_sent 260828 && echo ano || echo ne)" "ne"
+mark_sent "$SDCARD/snaps/260828/210948_000_65535_P.jpg"
+assert_eq "doslany den je fully_sent" "$(day_fully_sent 260828 && echo ano || echo ne)" "ano"
+
+# --- uzavreny nejstarsi den posune cursor na dalsi nedoslany ---
+cursor_advance
+assert_eq "po uzavreni 260828 stoji cursor na 260829" "$(cursor_read)" "260829"
+
+# --- nejnovejsi den se NIKDY neuzavira, i kdyz je cely odeslany ---
+mark_sent "$SDCARD/snaps/260829/080000_000_65535_P.jpg"
+mark_sent "$SDCARD/snaps/260830/010000_000_65535_P.jpg"
+cursor_advance
+assert_eq "cursor se zastavi na nejnovejsim dni, nikdy za nim" \
+          "$(cursor_read)" "260830"
+
+# --- cursor se nikdy neposouva zpet ---
+cursor_write 260830
+: > "$STATE_DIR/sent_list.txt"
+cursor_advance
+assert_eq "prazdny sent_list cursor nevrati zpatky" "$(cursor_read)" "260830"
+
+# --- soubor odmitany snapready drzi svuj den otevreny (spec 9.3) ---
+cursor_write 260828
+: > "$STATE_DIR/sent_list.txt"
+printf '#!/bin/sh\ncase "$1" in *210948*) exit 1 ;; esac\nexit 0\n' \
+    > "$HUNTER_DIR/bin/snapready"
+chmod +x "$HUNTER_DIR/bin/snapready"
+cursor_advance
+assert_eq "den se souborem, ktery snapready odmita, zustava otevreny" \
+          "$(cursor_read)" "260828"
+printf '#!/bin/sh\nexit 0\n' > "$HUNTER_DIR/bin/snapready"
+chmod +x "$HUNTER_DIR/bin/snapready"
+
 fixture_teardown
 finish
