@@ -157,6 +157,20 @@ snap_num6() {
     return 1
 }
 
+# list_snap_days
+# Vypise nazvy slozek dnu v snaps/ (jen jmeno, ne cesta), jeden na
+# radek. Pouziva se glob, ne find - glob je serazeny lexikograficky, coz
+# je u YYMMDD zaroven chronologicky, a nestoji ani jeden fork.
+# Nazvy dnu neobsahuji mezery, takze u volajiciho staci bezne deleni
+# slov, zadne hratky s IFS.
+list_snap_days() {
+    for _lsd in "$SDCARD"/snaps/*/; do
+        [ -d "$_lsd" ] || continue
+        _lsd=${_lsd%/}
+        printf '%s\n' "${_lsd##*/}"
+    done
+}
+
 # load_config
 # config.txt je platny POSIX shell (KLIC=HODNOTA, komentare #), takze se
 # naimportuje primo pres `.` - zadny vlastni parser netreba. Vyplni

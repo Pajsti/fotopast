@@ -278,31 +278,56 @@ snap_newer() {
 }
 
 # request_last <N> - N nejnovejsich fotek.
-# Busybox nema sort, takze se N-krat hleda maximum - pri REQUEST_MAX <= 5
-# a stovkach souboru je to zanedbatelne.
+#
+# Jde po slozkach dnu od NEJNOVEJSI a konci, jakmile ma N kusu - ne
+# N-krat pres cely strom, jak to delala puvodni verze. Pri tisicich
+# fotek byl puvodni postup neunosny (spec 2026-09-02, 1.2).
+#
+# Cursor se ZAMERNE ignoruje a sent_list.txt taky: vyzadane fotky maji
+# dosahnout i na dny, ktere uz automatika uzavrela, a na uz odeslane
+# snimky (spec 2026-09-02, 8.3).
 request_last() {
     want="$1"
     [ "$want" -gt "$REQUEST_MAX" ] && want="$REQUEST_MAX"
 
-    taken=""
-    i=0
-    while [ "$i" -lt "$want" ]; do
-        best=""
-        for f in $(find "$SDCARD/snaps" -type f -name '*.jpg' 2>/dev/null); do
-            case "
-$taken" in
-                *"
-$f"*) continue ;;
-            esac
-            if [ -z "$best" ] || snap_newer "$f" "$best"; then
-                best="$f"
+    added=0
+    days=$(list_snap_days)
+
+    while [ "$added" -lt "$want" ]; do
+        # nejnovejsi dosud nezpracovany den
+        newest=""
+        for d in $days; do
+            snap_num6 "$d" || continue
+            if [ -z "$newest" ] || [ "$d" -gt "$newest" ]; then
+                newest="$d"
             fi
         done
-        [ -z "$best" ] && break
-        taken="$taken
+        [ -z "$newest" ] && break
+
+        # z tohohle dne ber od nejnovejsiho, dokud neni dost
+        taken=""
+        while [ "$added" -lt "$want" ]; do
+            best=""
+            for f in "$SDCARD/snaps/$newest"/*.jpg; do
+                [ -f "$f" ] || continue
+                case "
+$taken" in
+                    *"
+$f"*) continue ;;
+                esac
+                if [ -z "$best" ] || snap_newer "$f" "$best"; then
+                    best="$f"
+                fi
+            done
+            [ -z "$best" ] && break
+            taken="$taken
 $best"
-        request_add "$best" || break
-        i=$((i + 1))
+            request_add "$best" || return 0
+            added=$((added + 1))
+        done
+
+        # den vycerpan - odeber ho ze seznamu a jdi na starsi
+        days=$(printf '%s\n' "$days" | grep -v -x -F "$newest")
     done
 }
 

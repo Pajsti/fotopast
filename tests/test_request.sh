@@ -175,5 +175,36 @@ esac
 assert_eq "GET * zustava uvnitr snaps/ (nebo nic nenajde)" "$r" "ok"
 assert_not_contains "GET * v kazdem pripade neobsahuje cestu mimo snaps/" "$REQUESTED_SNAPS" "etc/passwd"
 
+# =====================================================================
+# Poradi a dosah LAST (spec 2026-09-02, 8.2 a 8.3)
+# =====================================================================
+
+# --- LAST vraci OPRAVDU nejnovejsi, ne jen "nejakych N" ---
+REQUESTED_SNAPS=""; CMD_REPLY=""
+execute_command "LAST 1" 1
+assert_eq "LAST 1 vrati nejnovejsi fotku (260830 030000)" \
+          "$REQUESTED_SNAPS" "$SDCARD/snaps/260830/030000_000_65535_P.jpg"
+
+REQUESTED_SNAPS=""; CMD_REPLY=""
+execute_command "LAST 3" 1
+assert_contains "LAST 3 obsahuje nejnovejsi" "$REQUESTED_SNAPS" "260830/030000"
+assert_contains "LAST 3 obsahuje druhou nejnovejsi" "$REQUESTED_SNAPS" "260830/020000"
+assert_contains "LAST 3 obsahuje treti nejnovejsi" "$REQUESTED_SNAPS" "260830/010000"
+assert_not_contains "LAST 3 uz nesaha na starsi den" "$REQUESTED_SNAPS" "260829"
+
+# --- LAST prekroci hranici dne, kdyz v nejnovejsim dni neni dost ---
+REQUESTED_SNAPS=""; CMD_REPLY=""
+execute_command "LAST 4" 1
+assert_contains "LAST 4 sahne i do predchoziho dne" "$REQUESTED_SNAPS" "260829/080000"
+assert_eq "LAST 4 vrati presne 4" "$(count_lines "$REQUESTED_SNAPS")" "4"
+
+# --- LAST IGNORUJE cursor: musi dosahnout i na uzavreny den ---
+# Tohle je regrese, ktera by rozbila cely smysl vyzadani (spec 8.3).
+printf '260830\n' > "$STATE_DIR/cursor.txt"
+REQUESTED_SNAPS=""; CMD_REPLY=""
+execute_command "LAST 4" 1
+assert_contains "LAST sahne i na den PRED cursorem" "$REQUESTED_SNAPS" "260829/080000"
+rm -f "$STATE_DIR/cursor.txt"
+
 fixture_teardown
 finish
