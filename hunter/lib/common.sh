@@ -147,6 +147,16 @@ set_config_value() {
     sync
 }
 
+# snap_num6 <retezec>
+# 0, kdyz je vstup presne 6 cislic. Pouziva se na overeni YYMMDD i
+# HHMMSS - obe casti cesty ke snimku, a taky nazvy slozek dnu.
+# Sestimistne cislo (max 999999) se vejde do 32bitove aritmetiky, takze
+# se pak da porovnavat pres -gt/-lt.
+snap_num6() {
+    case "$1" in [0-9][0-9][0-9][0-9][0-9][0-9]) return 0 ;; esac
+    return 1
+}
+
 # load_config
 # config.txt je platny POSIX shell (KLIC=HODNOTA, komentare #), takze se
 # naimportuje primo pres `.` - zadny vlastni parser netreba. Vyplni

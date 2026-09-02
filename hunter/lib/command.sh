@@ -257,15 +257,18 @@ request_count() {
 snap_date_of() { sp=${1%/*}; printf '%s' "${sp##*/}"; }
 snap_time_of() { sb=${1##*/}; printf '%s' "${sb%%_*}"; }
 
-snap_num6() {
-    case "$1" in [0-9][0-9][0-9][0-9][0-9][0-9]) return 0 ;; esac
-    return 1
-}
-
 # snap_newer <a> <b> -> 0 kdyz a je novejsi nez b
+#
+# Datum a cas se tahaji INLINE parametrickou expanzi, ne pres
+# snap_date_of/snap_time_of - kazde $( ) je fork a tahle funkce se vola
+# v cyklu pres vsechny soubory dne. Puvodni varianta stala 4 forky na
+# jedno porovnani, coz pri tisicich fotek delalo z LAST N radove
+# statisice procesu (spec 2026-09-02, sekce 1.2).
 snap_newer() {
-    ad=$(snap_date_of "$1"); at=$(snap_time_of "$1")
-    bd=$(snap_date_of "$2"); bt=$(snap_time_of "$2")
+    sp=${1%/*}; ad=${sp##*/}
+    sb=${1##*/}; at=${sb%%_*}
+    sp=${2%/*}; bd=${sp##*/}
+    sb=${2##*/}; bt=${sb%%_*}
     snap_num6 "$ad" && snap_num6 "$at" || return 1
     snap_num6 "$bd" && snap_num6 "$bt" || return 0
     [ "$ad" -gt "$bd" ] && return 0
