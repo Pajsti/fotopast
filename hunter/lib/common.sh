@@ -171,6 +171,37 @@ list_snap_days() {
     done
 }
 
+# cursor_read
+# Vypise den (YYMMDD), od ktereho ma automatika hledat kandidaty.
+#
+# Chybejici, prazdny nebo poskozeny state/cursor.txt znamena "od
+# nejstarsiho dne na karte" - tedy presne dnesni chovani. Diky tomu
+# nepotrebuje zive nasazeni zadny rucni migracni krok (spec 2026-09-02,
+# sekce 3.4).
+cursor_read() {
+    _cur=""
+    if [ -f "$STATE_DIR/cursor.txt" ]; then
+        read -r _cur < "$STATE_DIR/cursor.txt" 2>/dev/null
+    fi
+    snap_num6 "$_cur" || _cur=""
+
+    if [ -z "$_cur" ]; then
+        for _d in $(list_snap_days); do
+            snap_num6 "$_d" || continue
+            if [ -z "$_cur" ] || [ "$_d" -lt "$_cur" ]; then
+                _cur="$_d"
+            fi
+        done
+    fi
+    printf '%s' "$_cur"
+}
+
+# cursor_write <YYMMDD>
+cursor_write() {
+    printf '%s\n' "$1" > "$STATE_DIR/cursor.txt"
+    sync
+}
+
 # load_config
 # config.txt je platny POSIX shell (KLIC=HODNOTA, komentare #), takze se
 # naimportuje primo pres `.` - zadny vlastni parser netreba. Vyplni

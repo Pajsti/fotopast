@@ -5,24 +5,49 @@
 # "kandidat" na dve mista.
 #
 # Zadne hlidani slozky pres inotify - busybox ho nema (viz spec sekce 5).
-# Detekce je rozdil mnozin: kandidati = snaps/**/*.jpg - sent_list.txt,
-# kazdy proveren snapready (viz test_files/snapready.c) na kompletnost.
+# Detekce je rozdil mnozin omezeny cursorem: kandidati = snaps/<den
+# OD CURSORU DAL>/**/*.jpg - sent_list.txt, kazdy proveren snapready
+# (viz test_files/snapready.c) na kompletnost.
 
 # find_ready_candidates
 # Vypise (radek na soubor) cesty ke snimkum, ktere jeste nejsou v
-# sent_list.txt a jsou kompletni. Poradi neni garantovane chronologicky -
-# busybox find/glob poradi negarantuje a bez sort to neresime; nevadi,
-# spravnost na tom nezavisi (viz komentar u wait_for_candidates).
+# sent_list.txt a jsou kompletni.
+#
+# Prochazi jen dny OD CURSORU dal (spec 2026-09-02, sekce 3) - starsi
+# dny jsou vyrizene a znovu se do nich nekouka. To je duvod, proc tohle
+# neroste s celkovym poctem fotek na karte, ale jen s tim, co pribylo.
+#
+# Druha polovina zrychleni: JEDEN fgrep na den misto jednoho na soubor.
+# Puvodni verze spoustela novy proces pro kazdy soubor, coz pri tisicich
+# fotek delalo tisice forku na probuzeni.
+#
+# Vystup je chronologicky VZESTUPNY (glob nad YYMMDD i nad HHMMSS_...
+# radi lexikograficky, coz je tady zaroven chronologicky). MAX_QUEUE na
+# to spoleha, kdyz odrezava nejstarsi.
 find_ready_candidates() {
-    find "$SDCARD/snaps" -type f -name '*.jpg' 2>/dev/null | \
-    while IFS= read -r f; do
-        if [ -f "$STATE_DIR/sent_list.txt" ] && \
-           fgrep -qxF "$f" "$STATE_DIR/sent_list.txt" 2>/dev/null; then
-            continue
+    _cur=$(cursor_read)
+    [ -n "$_cur" ] || return 0
+    _nl='
+'
+
+    for _d in $(list_snap_days); do
+        snap_num6 "$_d" || continue
+        [ "$_d" -lt "$_cur" ] && continue
+
+        _slice=""
+        if [ -f "$STATE_DIR/sent_list.txt" ]; then
+            _slice=$(fgrep "/snaps/$_d/" "$STATE_DIR/sent_list.txt" 2>/dev/null)
         fi
-        if "$HUNTER_DIR/bin/snapready" "$f" >/dev/null 2>&1; then
-            printf '%s\n' "$f"
-        fi
+
+        for _f in "$SDCARD/snaps/$_d"/*.jpg; do
+            [ -f "$_f" ] || continue
+            case "$_nl$_slice$_nl" in
+                *"$_nl$_f$_nl"*) continue ;;
+            esac
+            if "$HUNTER_DIR/bin/snapready" "$_f" >/dev/null 2>&1; then
+                printf '%s\n' "$_f"
+            fi
+        done
     done
 }
 
