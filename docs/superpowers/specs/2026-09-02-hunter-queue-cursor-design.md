@@ -103,7 +103,7 @@ Den `D` se uzavře, když platí obojí:
 
 První podmínka se řídí **výhradně členstvím v `sent_list.txt`**, ne
 kandidaturou. Soubor, který `snapready` odmítá (neúplný, poškozený),
-tedy den drží otevřený — viz omezení 8.3. Je to schválně: "neumím ho
+tedy den drží otevřený — viz omezení 9.3. Je to schválně: "neumím ho
 poslat" není totéž co "je vyřízený".
 
 Druhá podmínka je záměrně **strukturální, ne podle hodin**. Hodiny
@@ -160,7 +160,8 @@ odeslal. Soubory na kartě zůstávají. Pak se provede posun cursoru
 - Odpověď: `QUEUE CLEARED (<N> skipped)`.
 
 Implementačně: přeskočené cesty se připíší do `sent_list.txt` — viz
-sekce 8, bod 1, včetně důsledku.
+sekce 9, bod 1, včetně důsledku. Vyžádaných fotek se to nesmí dotknout
+(sekce 7.1).
 
 ## 6. `MAX_QUEUE`
 
@@ -181,13 +182,44 @@ Vztah k `MAX_SEND_PER_WAKE` (kolik se pošle za jedno probuzení) je
 kolmý: `MAX_SEND_PER_WAKE` škrtí propustnost, `MAX_QUEUE` omezuje, jak
 velký nedodělek má vůbec smysl držet.
 
-## 7. Oprava `LAST N`
+## 7. Vyžádané fotky mají přednost
+
+Čtvrtý bod zadání. Přednost **už funguje a je otestovaná** — tenhle
+spec ji především nesmí rozbít.
+
+Dnešní stav: vyžádané se před odesíláním předřadí automatickým
+kandidátům ([hunter.sh:159-166](../../../hunter/hunter.sh#L159-L166)),
+takže při vyčerpání `MAX_SEND_PER_WAKE` odpadnou automatické, ne
+vyžádané. Před spojením se odstraní překryv
+([hunter.sh:133-157](../../../hunter/hunter.sh#L133-L157)), aby se
+tatáž fotka neposlala dvakrát. A vyžádané se **nezapisují** do
+`sent_list.txt` ([hunter.sh:182-191](../../../hunter/hunter.sh#L182-L191))
+— jinak by se prvním vyžádáním označily za odeslané a už by nikdy
+neodešly automaticky. Pokrývají to scénáře B a C v
+`tests/test_wake_send.sh`.
+
+### 7.1 Nový invariant: přeskakování se vyžádaných nesmí dotknout
+
+`CLEAR QUEUE` (sekce 5) ani `MAX_QUEUE` (sekce 6) **nesmí** označit za
+vyřízenou fotku, která je v `REQUESTED_SNAPS` tohoto probuzení — ani ji
+přeskočit, ani ji zapsat do `sent_list.txt`.
+
+Důvod je konkrétní, ne teoretický: přeskočení zapisuje cestu do
+`sent_list.txt` (sekce 9, bod 1). Kdyby tudy propadla vyžádaná fotka,
+dostane se do `sent_list.txt` cestou, kterou `hunter.sh` záměrně
+obchází — a tím **navždy** vypadne z automatického odesílání.
+
+Prakticky: přeskakování pracuje výhradně nad automatickou množinou
+kandidátů, a vyžádané z ní musí být vyňaty **dřív**, než se cokoli
+zapíše — tedy před spojením obou množin.
+
+## 8. Oprava `LAST N`
 
 Dvě změny, obě uvnitř `snap_newer()` a `request_last()`. Dosah je
 ověřený: `snap_date_of`/`snap_time_of` volá **jen** `snap_newer`, a ten
 **jen** `request_last` — nic jiného v `hunter/` ani `tests/`.
 
-### 7.1 Bez forků
+### 8.1 Bez forků
 
 `snap_newer` si datum a čas vytáhne parametrickou expanzí místo
 `$(...)`:
@@ -203,7 +235,7 @@ volající se nemění vůbec.
 `snap_date_of`/`snap_time_of` zůstávají definované (jsou to čitelné
 pojmenované operace), jen se nevolají v horké smyčce.
 
-### 7.2 Předčasné ukončení
+### 8.2 Předčasné ukončení
 
 `request_last` půjde po složkách dnů **od nejnovější** a skončí, jakmile
 má N kusů:
@@ -219,7 +251,7 @@ pro každý den:
 Při `LAST 5` se typicky sáhne na jeden až dva dny místo N průchodů
 celým stromem.
 
-### 7.3 Co se nemění
+### 8.3 Co se nemění
 
 `request_last` **nesmí** koukat na cursor ani na `sent_list.txt` —
 vyžádané fotky mají dosáhnout i na dávno odeslané a na dny za cursorem.
@@ -229,7 +261,7 @@ To je celý smysl vyžádání.
 `find` bez forků na soubor — při 5 000 souborech jde o jeden průchod,
 přijatelné. Obojí zůstává.
 
-## 8. Známá omezení a přijatá rizika
+## 9. Známá omezení a přijatá rizika
 
 1. **`WIPE` smaže i přeskočené fotky.** Přeskočené (přes `CLEAR QUEUE`
    nebo `MAX_QUEUE`) se zapisují do `sent_list.txt`, takže je pozdější
@@ -250,7 +282,7 @@ přijatelné. Obojí zůstává.
 4. **YY přetečení století** v porovnání dnů — zděděné omezení, už
    popsané v [command.sh:254-256](../../../hunter/lib/command.sh#L254-L256).
 
-## 9. Změny v příkazech a konfiguraci
+## 10. Změny v příkazech a konfiguraci
 
 | Co | Změna |
 |---|---|
@@ -260,21 +292,26 @@ přijatelné. Obojí zůstává.
 | `MAX_QUEUE` | nový klíč, výchozí `100`, s poznámkou k bodu 8.1 |
 | `state/cursor.txt` | nový stavový soubor |
 
-## 10. Testy
+## 11. Testy
 
 - cursor se **nikdy** neposune přes nejnovější složku dne
-- den se uzavře, až když v něm nezbývá nevyřízený soubor
+- den se uzavře, až když je **každý** jeho soubor v `sent_list.txt`;
+  soubor odmítaný `snapready` ho drží otevřený
 - chybějící `cursor.txt` = chování jako dnes (start od nejstaršího dne)
 - retirovaný den se už neprochází (ověřit počítáním, ne odhadem)
 - `CLEAR QUEUE` vyprázdní frontu a **soubory nechá na kartě**
 - `MAX_QUEUE` odřízne nejstarší a fronta se vejde pod strop
+- **vyžádaná fotka se přeskočením nikdy nedostane do `sent_list.txt`** —
+  `CLEAR QUEUE` i `MAX_QUEUE` ji musí minout a fotka musí odejít
+  (invariant 7.1). Bez tohohle testu jde o tichou, trvalou ztrátu
+  automatického odesílání pro daný soubor.
 - **`LAST` dosáhne na fotky před cursorem** — regrese, která by rozbila
   celý smysl vyžádání
 - `snap_newer` dává stejné výsledky jako dnes (dnes ho nepokrývá žádný
   test — přibude)
 - stávající scénáře v `tests/test_wake_send.sh` projdou beze změny
 
-## 11. Mimo rozsah
+## 12. Mimo rozsah
 
 - Přesouvání odeslaných fotek do `sentHD/`/`sentSD/` (sekce 2)
 - Optimalizace `request_get` (jeden `find` je přijatelný)
