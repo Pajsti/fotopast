@@ -84,6 +84,13 @@ pro každý takový den d:
         není-li v slice a projde-li snapready -> kandidát
 ```
 
+Vedlejší, ale důležitý důsledek: složky dnů i soubory uvnitř se
+procházejí **globem, ne `find`em**, takže výstup je nově
+**chronologicky vzestupný**. Dnešní `find_ready_candidates` pořadí
+negarantuje a říká to i v komentáři. `MAX_QUEUE` (sekce 6) na tuhle
+vlastnost spoléhá, když odřezává "nejstarší" — musí být tedy krytá
+testem, ne jen předpokládaná.
+
 Klíčová změna není jen zúžení množiny dnů, ale i **jeden `fgrep` na
 den místo jednoho na soubor**. Porovnání proti načtenému slice se dělá
 shellovým `case` (bez forku), na plnou shodu řádku:
@@ -157,7 +164,15 @@ odeslal. Soubory na kartě zůstávají. Pak se provede posun cursoru
   Zůstává tedy dostupný i v režimu `SENDER` (viz spec příkazů, 3.3).
 - **Bez potvrzovacího slova.** `WIPE` vyžaduje `CONFIRM`, protože maže;
   `CLEAR QUEUE` soubory nechává.
-- Odpověď: `QUEUE CLEARED (<N> skipped)`.
+- Odpověď: `QUEUE CLEARED`, **bez počtu**.
+
+Proč bez počtu: příkaz sám jen nastaví příznak, skutečné přeskočení
+provede `hunter.sh` **až po zpracování všech příkazů**. Musí to tak být
+kvůli invariantu 7.1 — `REQUESTED_SNAPS` je konečný teprve, když
+doběhnou všechny příkazy daného probuzení. Kdyby v jedné dávce přišel
+`CLEAR QUEUE` dřív než `LAST 2`, přeskočil by fotku, kterou má `LAST`
+teprve vyžádat. V okamžiku odesílání odpovědi tedy počet ještě není
+znám; **loguje se** až při samotném přeskočení.
 
 Implementačně: přeskočené cesty se připíší do `sent_list.txt` — viz
 sekce 9, bod 1, včetně důsledku. Vyžádaných fotek se to nesmí dotknout
@@ -288,7 +303,7 @@ přijatelné. Obojí zůstává.
 |---|---|
 | `CLEAR QUEUE` | nový příkaz, bez povinného tokenu |
 | `LIST CMD` | musí `CLEAR QUEUE` vypsat (existuje test na shodu s dispatch tabulkou) |
-| `STATUS` | rozšířit o hloubku fronty — počet čekajících kandidátů po uplatnění cursoru, tvar `fronta:<N>` |
+| `STATUS` | rozšířit o hloubku fronty — počet čekajících kandidátů po uplatnění cursoru, tvar `FRONTA:<N>` (velkými, ve stylu stávajících `BAT:`/`SIG:`/`SPACE:`/`TOKENS:`) |
 | `MAX_QUEUE` | nový klíč, výchozí `100`, s poznámkou k bodu 8.1 |
 | `state/cursor.txt` | nový stavový soubor |
 
