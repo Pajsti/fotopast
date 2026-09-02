@@ -26,6 +26,17 @@ assert_eq "poskozeny cursor -> nejstarsi den" "$(cursor_read)" "260828"
 printf '\n' > "$STATE_DIR/cursor.txt"
 assert_eq "prazdny cursor -> nejstarsi den" "$(cursor_read)" "260828"
 
+# --- cursor novejsi nez nejnovejsi den na karte je nemozny stav (spec:
+# cursor se nikdy neposune pres nejnovejsi slozku dne) a resi se stejne
+# jako poskozeny cursor - NEklampuje se na nejnovejsi den, spadne az na
+# nejstarsi, jinak by se tise preskocilo vse mezi skutecnou pozici a
+# nejnovejsim dnem ---
+cursor_write 270101
+assert_eq "cursor za nejnovejsim dnem -> nejstarsi den (ne klamp)" \
+          "$(cursor_read)" "260828"
+assert_eq "cursor za nejnovejsim dnem -> najdou se vsechny fotky, ne nula" \
+          "$(count_lines "$(find_ready_candidates)")" "3"
+
 # --- nastaveny cursor odrizne starsi dny ---
 cursor_write 260829
 assert_eq "cursor se precte zpatky" "$(cursor_read)" "260829"

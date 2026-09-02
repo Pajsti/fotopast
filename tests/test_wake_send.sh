@@ -25,15 +25,21 @@
 # Kod z briefu (Krok 4) spojuje $REQUESTED_SNAPS s vysledkem
 # wait_for_candidates() BEZ odstraneni duplicit. Vyzadana fotka, ktera
 # jeste nebyla odeslana, je ale SOUCASNE platnym automatickym
-# kandidatem (find_ready_candidates hleda vse mimo sent_list.txt a o
-# vyzadani nic nevi) - bez dedup kroku by se tak objevila v $snap_list
-# DVAKRAT, poslala by se e-mailem dvakrat a OBE kopie by (spravne, viz
-# case test) skoncily mimo sent_list.txt, protoze obe matchuji
-# REQUESTED_SNAPS. Vysledek: duplicitni e-mail a fotka navzdy oznacovana
-# jako "neodeslana" pro automatiku. hunter.sh proto ted PRED spojenim
-# odstranuje z automatickeho seznamu kazdy radek, ktery uz je mezi
-# vyzadanymi (viz komentar u "POZOR na prekryv" v hunter.sh). Scenar A
-# nize tohle primo overuje (attach count == 2, ne 3).
+# kandidatem (find_ready_candidates hleda kandidaty ode dne cursoru dal,
+# mimo sent_list.txt, a o vyzadani nic nevi) - bez dedup kroku by se tak
+# objevila v $snap_list DVAKRAT, poslala by se e-mailem dvakrat a OBE
+# kopie by (spravne, viz case test) skoncily mimo sent_list.txt, protoze
+# obe matchuji REQUESTED_SNAPS. Vysledek: duplicitni e-mail a fotka
+# navzdy oznacovana jako "neodeslana" pro automatiku. hunter.sh proto ted
+# PRED spojenim odstranuje z automatickeho seznamu kazdy radek, ktery uz
+# je mezi vyzadanymi (viz komentar u "POZOR na prekryv" v hunter.sh).
+# Scenar A nize tohle primo overuje (attach count == 2, ne 3).
+#
+# Tento test nikdy nezapisuje state/cursor.txt, takze bezi po fallback
+# ceste cursor_read (chybejici cursor -> nejstarsi den na karte) -
+# find_ready_candidates tak fakticky prochazi uplne vsechno, presne jako
+# pred zavedenim cursoru (Task 3). Chovani se stavem nastaveneho cursoru
+# je overene v tests/test_cursor.sh, ne tady.
 . "$(dirname "$0")/assert.sh"
 . "$(dirname "$0")/fixture_subprocess.sh"
 

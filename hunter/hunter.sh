@@ -122,10 +122,10 @@ snap_list=$(wait_for_candidates)
 #
 # POZOR na prekryv: vyzadana fotka, ktera jeste NEBYLA odeslana, je
 # soucasne platnym automatickym kandidatem - find_ready_candidates (viz
-# lib/mail.sh) ji najde take, protoze hleda vsechno mimo sent_list.txt a
-# o vyzadani nic nevi. Bez odstraneni duplicit by se stejna cesta
-# objevila v $snap_list dvakrat, poslala by se e-mailem dvakrat a KAZDA
-# kopie by se (spravne, viz case nize) vynechala ze sent_list.txt,
+# lib/mail.sh) ji najde take, protoze hleda kandidaty ode dne cursoru
+# dal, mimo sent_list.txt, a o vyzadani nic nevi. Bez odstraneni duplicit
+# by se stejna cesta objevila v $snap_list dvakrat, poslala by se e-mailem
+# dvakrat a KAZDA kopie by se (spravne, viz case nize) vynechala ze sent_list.txt,
 # protoze matchuje REQUESTED_SNAPS - vysledkem by byl duplicitni e-mail
 # a fotka navzdy oznacovana jako "neodeslana" pro automatiku (dokud by ji
 # nekdo znovu nevyzadal). Proto se z automatickeho seznamu pred spojenim

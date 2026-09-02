@@ -178,6 +178,14 @@ list_snap_days() {
 # nejstarsiho dne na karte" - tedy presne dnesni chovani. Diky tomu
 # nepotrebuje zive nasazeni zadny rucni migracni krok (spec 2026-09-02,
 # sekce 3.4).
+#
+# Cursor se nikdy neposune pres nejnovejsi slozku dne na karte (spec
+# 2026-09-02) - hodnota novejsi nez nejnovejsi den je proto nemozny stav,
+# stejne neduveryhodny jako poskozeny soubor, a resi se identicky: NEklampuje
+# se na nejnovejsi den (to by tise preskocilo vsechny dny mezi skutecnou
+# pozici a nejnovejsim), ale spadne az na nejstarsi den. Jednorazovy plny
+# rescan je levny a sent_list.txt porad dedupuje, takze nehrozi duplicitni
+# odeslani.
 cursor_read() {
     _cur=""
     if [ -f "$STATE_DIR/cursor.txt" ]; then
@@ -185,14 +193,23 @@ cursor_read() {
     fi
     snap_num6 "$_cur" || _cur=""
 
-    if [ -z "$_cur" ]; then
-        for _d in $(list_snap_days); do
-            snap_num6 "$_d" || continue
-            if [ -z "$_cur" ] || [ "$_d" -lt "$_cur" ]; then
-                _cur="$_d"
-            fi
-        done
+    _oldest=""
+    _newest=""
+    for _d in $(list_snap_days); do
+        snap_num6 "$_d" || continue
+        if [ -z "$_oldest" ] || [ "$_d" -lt "$_oldest" ]; then
+            _oldest="$_d"
+        fi
+        if [ -z "$_newest" ] || [ "$_d" -gt "$_newest" ]; then
+            _newest="$_d"
+        fi
+    done
+
+    if [ -n "$_cur" ] && [ -n "$_newest" ] && [ "$_cur" -gt "$_newest" ]; then
+        _cur=""
     fi
+    [ -z "$_cur" ] && _cur="$_oldest"
+
     printf '%s' "$_cur"
 }
 
