@@ -214,9 +214,14 @@ cursor_read() {
 }
 
 # cursor_write <YYMMDD>
+# Atomicky pres atomic_write_file (viz vyse) - torn write by jinak mohl
+# nechat cursor.txt s useknutym, neplatnym obsahem. Neni to bezpecnostne
+# nosne (cursor_read poskozeny i chybejici soubor resi stejne - rescan od
+# nejstarsiho dne, sent_list.txt porad dedupuje), ale nema smysl tu byt
+# jedinym primym zapisem v souboru, kde uz atomic_write_file existuje.
 cursor_write() {
-    printf '%s\n' "$1" > "$STATE_DIR/cursor.txt"
-    sync
+    atomic_write_file "$STATE_DIR/cursor.txt" "$1
+"
 }
 
 # skip_snaps <seznam cest, radek na soubor>
