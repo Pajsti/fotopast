@@ -49,6 +49,11 @@ nepřepne. Aktualizace živé karty tedy nevyžaduje žádný migrační krok.
 které se můžou rozejít. Když je SMTP zablokované, odpověď se objeví ve
 složce — uživatel ji uvidí, i když nedorazí do schránky.
 
+**`SEND_TRANSPORT` neovlivňuje příjem příkazů.** Příkazový kanál chodí
+přes IMAP vždycky, bez ohledu na nastavení — `SEND_TRANSPORT` řídí jen
+směr ven. `SEND_TRANSPORT=smtp` tedy neznamená „IMAP se nepoužívá",
+znamená „ven se posílá mailem".
+
 ### 3.1 Validace
 
 `load_config` obojí ověří, ve stylu ostatních kontrol tamtéž:
@@ -61,6 +66,9 @@ složce — uživatel ji uvidí, i když nedorazí do schránky.
   příkazy přes `SEARCH UNSEEN` v INBOXu, takže by si vlastní uložené
   fotky přečetl jako příchozí příkazy. Kontrola musí být v kódu, ne jen
   v dokumentaci.
+- Režim, který používá IMAP (`imap`, `smtp-imap`, `imap-smtp`,
+  `smtp+imap`) při prázdném `IMAP_HOST` → `smtp`, se záznamem do logu.
+  Bez toho by se každé odeslání tiše nezdařilo.
 
 ## 4. Dispečer v shellu
 
