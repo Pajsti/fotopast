@@ -98,10 +98,13 @@ cursor_advance() {
     done
     [ -n "$_newest" ] || return 0
 
+    _cur=$(cursor_read)
+
     _open=""
     for _d in $(list_snap_days); do
         snap_num6 "$_d" || continue
         [ "$_d" -ge "$_newest" ] && continue
+        [ -n "$_cur" ] && [ "$_d" -lt "$_cur" ] && continue
         day_fully_sent "$_d" && continue
         if [ -z "$_open" ] || [ "$_d" -lt "$_open" ]; then
             _open="$_d"
@@ -114,7 +117,6 @@ cursor_advance() {
         _new="$_newest"
     fi
 
-    _cur=$(cursor_read)
     [ -n "$_cur" ] && [ "$_new" -le "$_cur" ] && return 0
     cursor_write "$_new"
     log "cursor posunut na $_new"

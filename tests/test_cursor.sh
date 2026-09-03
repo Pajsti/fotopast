@@ -124,5 +124,21 @@ assert_eq "den se souborem, ktery snapready odmita, zustava otevreny" \
 printf '#!/bin/sh\nexit 0\n' > "$HUNTER_DIR/bin/snapready"
 chmod +x "$HUNTER_DIR/bin/snapready"
 
+# --- stara fotka pod cursorem se neuznava (spec omezeni 3) ---
+# Kdyz se hodiny vratily zpatky, v starsi slozce se muze objevit nova
+# fotka. find_ready_candidates ji nikdy neuvidí (omezeni 2: ta je prijata
+# pres DATE/GET). Ale search pro nejstarsi otevreny den ji muze najit a
+# dostat se do deadlocku - cursor by se mel pohybovat i kdyz je ta fotka
+# tam, pokud jsou novejsi dny uzavrene.
+cursor_write 260829
+fixture_snap 260831 123456
+: > "$STATE_DIR/sent_list.txt"
+mark_sent "$SDCARD/snaps/260829/080000_000_65535_P.jpg"
+mark_sent "$SDCARD/snaps/260830/010000_000_65535_P.jpg"
+mark_sent "$SDCARD/snaps/260831/123456_000_65535_P.jpg"
+cursor_advance
+assert_eq "cursor se posoune pres starsi fotku, pokud se hodiny vratily" \
+          "$(cursor_read)" "260831"
+
 fixture_teardown
 finish
