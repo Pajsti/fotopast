@@ -114,8 +114,8 @@ int mimemsg_emit(const struct mimemsg *m, mimemsg_sink sink, void *ctx)
     if (m->attach) {
         FILE *f = fopen(m->attach, "rb");
         if (!f) {
-            fprintf(stderr, "mimemsg: prilohu %s nelze otevrit, posilam bez ni\n",
-                    m->attach);
+            fprintf(stderr, "%s: prilohu %s nelze otevrit, posilam bez ni\n",
+                    m->progname ? m->progname : "mimemsg", m->attach);
         } else {
             int rc;
             snprintf(line, sizeof(line),

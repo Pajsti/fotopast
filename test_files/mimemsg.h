@@ -26,6 +26,7 @@ struct mimemsg {
     const char *body;      /* text, radky oddelene \n; smi byt "" */
     const char *attach;    /* cesta k JPEG souboru, nebo NULL */
     const char *date;      /* RFC 5322 datum, nebo NULL = hlavicka Date se vynecha */
+    const char *progname;  /* jmeno programu do chybovych hlasek; NULL = "mimemsg" */
 };
 
 /* Vygeneruje celou zpravu do sinku. Vraci 0 pri uspechu, -1 kdyz sink

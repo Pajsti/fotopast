@@ -324,6 +324,7 @@ int main(int argc, char **argv)
         m.body = body;
         m.attach = attach;
         m.date = datebuf;
+        m.progname = argv[0];
 
         ds.inner = smtp_sink;
         ds.inner_ctx = NULL;
@@ -334,8 +335,10 @@ int main(int argc, char **argv)
     }
 
     /* Ukoncovaci tecka je ramovani SMTP, ne soucast zpravy - proto
-     * ji pridava mailsend, ne mimemsg. */
-    tlsnet_write("\r\n.\r\n", 5);
+     * ji pridava mailsend, ne mimemsg. mimemsg_emit uz konci vlastnim
+     * CRLF (posledni radek je "--boundary--\r\n"), takze tady staci
+     * dopsat jen samotnou tecku s CRLF. */
+    tlsnet_write(".\r\n", 3);
 
     code = smtp_read_reply(rbuf, sizeof(rbuf));
     expect(code, 2, "konec DATA", rbuf);
