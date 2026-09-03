@@ -127,6 +127,27 @@ cursor_advance() {
         _new="$_newest"
     fi
 
+    # Zasekly den: nejstarsi otevreny den je presne ten, na kterem uz
+    # cursor stoji (tenhle beh se tedy vubec nepohne), a existuje novejsi
+    # den. Prohledavane okno (find_ready_candidates, day_fully_sent) tim
+    # roste o dalsi slozku pri kazdem dalsim dni na karte - ne o "jeden
+    # den navic za probuzeni", jak drive tvrdil spec 9.3 bod 3 (viz
+    # oprava tamtez - CLEAR QUEUE tohle neresi). Loguje se nejvys
+    # jednou za beh (cursor_advance bezi jednou za probuzeni), aby
+    # operator videl rostouci okno v log.txt misto aby ho odvodil az z
+    # pomaleho probuzeni. Na normalni ceste "cursor uz je na nejnovejsim
+    # dni, neni co dohanet" (_open zustava prazdne) se tahle podminka
+    # nikdy nesplni.
+    if [ -n "$_cur" ] && [ "$_open" = "$_cur" ] && [ "$_newest" -gt "$_cur" ]; then
+        _scanned=0
+        for _d in $(list_snap_days); do
+            snap_num6 "$_d" || continue
+            [ "$_d" -lt "$_cur" ] && continue
+            _scanned=$((_scanned + 1))
+        done
+        log "cursor zasekly na $_cur (existuje novejsi den $_newest) - prochazi se $_scanned slozek dne"
+    fi
+
     [ -n "$_cur" ] && [ "$_new" -le "$_cur" ] && return 0
     cursor_write "$_new"
     log "cursor posunut na $_new"

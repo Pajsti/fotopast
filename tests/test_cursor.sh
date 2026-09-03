@@ -115,14 +115,47 @@ assert_eq "prazdny sent_list cursor nevrati zpatky" "$(cursor_read)" "260830"
 # --- soubor odmitany snapready drzi svuj den otevreny (spec 9.3) ---
 cursor_write 260828
 : > "$STATE_DIR/sent_list.txt"
+: > "$LOG_FILE"
 printf '#!/bin/sh\ncase "$1" in *210948*) exit 1 ;; esac\nexit 0\n' \
     > "$HUNTER_DIR/bin/snapready"
 chmod +x "$HUNTER_DIR/bin/snapready"
 cursor_advance
 assert_eq "den se souborem, ktery snapready odmita, zustava otevreny" \
           "$(cursor_read)" "260828"
+
+# --- diagnosticky log (Finding 1b): zasekly cursor se ted MUSI ozvat -
+# 3 slozky dnu na karte, cursor stoji na nejstarsi (260828), novejsi den
+# (260830) existuje ---
+assert_contains "zasekly cursor hlasi svuj den" \
+                "$(cat "$LOG_FILE")" "cursor zasekly na 260828"
+assert_contains "zasekly cursor hlasi pocet aktualne prohledavanych slozek" \
+                "$(cat "$LOG_FILE")" "3 slozek"
+assert_eq "zasekly cursor se hlasi presne jednou" \
+          "$(grep -c 'cursor zasekly' "$LOG_FILE")" "1"
+
+# --- dalsi den pribude -> hlaseny pocet prohledavanych slozek roste
+# s nim, presne jak popisuje opravena spec 9.3 (ne "jeden den navic") ---
+fixture_snap 260901 000001
+: > "$LOG_FILE"
+cursor_advance
+assert_contains "okno roste s pribylym dnem (4 slozky misto 3)" \
+                "$(cat "$LOG_FILE")" "4 slozek"
+rm -rf "$SDCARD/snaps/260901" "$SDCARD/HDPIC/260901"
+
 printf '#!/bin/sh\nexit 0\n' > "$HUNTER_DIR/bin/snapready"
 chmod +x "$HUNTER_DIR/bin/snapready"
+
+# --- normalni cesta "nic k dohnani, cursor uz je na nejnovejsim dni"
+# se jako zasekla NESMI hlasit - ticho je tu spravne chovani ---
+: > "$STATE_DIR/sent_list.txt"
+: > "$LOG_FILE"
+mark_sent "$SDCARD/snaps/260828/210948_000_65535_P.jpg"
+mark_sent "$SDCARD/snaps/260829/080000_000_65535_P.jpg"
+mark_sent "$SDCARD/snaps/260830/010000_000_65535_P.jpg"
+cursor_write 260830
+cursor_advance
+assert_not_contains "cursor na nejnovejsim dni se NEhlasi jako zasekly" \
+                    "$(cat "$LOG_FILE")" "cursor zasekly"
 
 # --- stara fotka pod cursorem se neuznava (spec omezeni 3) ---
 # Kdyz se hodiny vratily zpatky, v starsi slozce se muze objevit nova
