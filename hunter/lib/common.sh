@@ -281,6 +281,17 @@ load_config() {
     # preskoci (zapisem do sent_list.txt), aby se dohaneni nenafouklo
     # donekonecna. 0 = bez omezeni.
     : "${MAX_QUEUE:=100}"
+    # Rucne psana hodnota na zive karte (CHECKLIST faze 9) je nachylna k
+    # preklepu ("1OO" misto "100") - bez pojistky by "[ "$MAX_QUEUE" -gt
+    # 0 ]" v hunter.sh skoncilo shellovou chybou na nesledovany stderr a
+    # strop by tise prestal platit. Vedouci nula (napr. "010") je navic
+    # dvojznacna: "[ ]" ji porovna jako desitkovou 10, ale "$(( ))" o par
+    # radku niz v hunter.sh ji precte jako osmickovou 8 - proto se tu
+    # odmita taky, osamocena "0" (bez omezeni) zustava platna. Stejny
+    # styl kontroly jako jinde v konfiguraci (viz status.sh, dev-stop.sh).
+    case "$MAX_QUEUE" in
+        ''|*[!0-9]*|0?*) MAX_QUEUE=100 ;;
+    esac
     : "${IMAP_PORT:=993}"
     : "${TOKEN_FILE:=$HUNTER_DIR/mail.token}"
     # CA svazek pro overeni certifikatu SMTP/IMAP serveru. PRAZDNY je

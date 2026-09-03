@@ -36,6 +36,32 @@ assert_contains "nevyzadana fotka do sent_list patri" \
 # --- vychozi hodnota MAX_QUEUE ---
 assert_eq "MAX_QUEUE ma vychozi hodnotu" "$MAX_QUEUE" "100"
 
+# --- MAX_QUEUE: preklep (necislo) spadne na vychozich 100 (Finding 3) ---
+# Rucne psana hodnota na zive karte (CHECKLIST faze 9) je nachylna k
+# preklepu - bez pojistky by "[ "$MAX_QUEUE" -gt 0 ]" v hunter.sh
+# skoncilo shellovou chybou na nesledovany stderr a strop by tise
+# prestal platit.
+printf 'MAX_QUEUE=1OO\n' >> "$CONFIG_FILE"
+load_config
+assert_eq "MAX_QUEUE preklep (1OO) spadne na vychozich 100" "$MAX_QUEUE" "100"
+
+# --- MAX_QUEUE: vedouci nula je dvojznacna ([ ] cte 010 jako 10,
+# $(( )) jako osmickove 8) - taky spadne na vychozich 100 ---
+printf 'MAX_QUEUE=010\n' >> "$CONFIG_FILE"
+load_config
+assert_eq "MAX_QUEUE s vedouci nulou (010) spadne na vychozich 100" "$MAX_QUEUE" "100"
+
+# --- MAX_QUEUE=0 (bez omezeni) zustava platna hodnota, i kdyz je to
+# jen jedna cislice ---
+printf 'MAX_QUEUE=0\n' >> "$CONFIG_FILE"
+load_config
+assert_eq "MAX_QUEUE=0 zustava 0 (bez omezeni)" "$MAX_QUEUE" "0"
+
+# --- platna hodnota se pouzije beze zmeny ---
+printf 'MAX_QUEUE=250\n' >> "$CONFIG_FILE"
+load_config
+assert_eq "platna hodnota MAX_QUEUE se respektuje" "$MAX_QUEUE" "250"
+
 # =====================================================================
 # CLEAR QUEUE (spec 2026-09-02, sekce 5)
 # =====================================================================
