@@ -173,7 +173,15 @@ příkazy nejsou ve firmwaru vůbec, takže fáze 5 je bezpředmětná.
       skončilo restart smyčkou vyvolanou MCU watchdogem.
 - [ ] Vytáhnout kartu a **fyzicky přes čtečku** zkopírovat:
   - `hunter/lib/common.sh`, `hunter/lib/command.sh`, `hunter/lib/mail.sh`,
-    `hunter/lib/status.sh`, `hunter/lib/sms.sh`, `hunter/hunter.sh`
+    `hunter/lib/status.sh`, `hunter/lib/sms.sh`, `hunter/lib/mailcmd.sh`,
+    `hunter/hunter.sh`
+- [ ] **Nespoléhej na tenhle seznam — porovnej md5 všech souborů**
+      `hunter/*.sh`, `hunter/lib/*.sh` a `hunter/bin/*` proti repu a
+      zkopíruj vše, co se liší. Při nasazení 2026-09-03 byla karta
+      pozadu i na `mailcmd.sh` (chyběla jí obalka `mailrecv_run` s
+      podporou `--ca` z commitu `e001d92`), přestože ho tenhle seznam
+      neobsahoval. Seznam říká, co se změnilo teď; md5 řekne, co je
+      na kartě doopravdy.
 - [ ] **Při té příležitosti dodělat dva resty z fáze 8** (ať se karta
       netahá zbytečně podruhé):
   - zkopírovat `hunter/bin/mailrecv` a `hunter/bin/mailsend` (obsahují
@@ -184,6 +192,13 @@ příkazy nejsou ve firmwaru vůbec, takže fáze 5 je bezpředmětná.
 - [ ] Doplnit do `hunter/config.txt` klíč `MAX_QUEUE=100`.
 - [ ] `cursor.txt` **nevytvářet** — chybějící soubor znamená „začni od
       nejstaršího dne", což je přesně dosavadní chování. Vytvoří se sám.
+- [ ] **Zkontrolovat `hunter/state/.lock`** — když tam je, smazat ho
+      (`rm -rf`). Zabitý běh po sobě zámek nechá, po restartu se jeho
+      pid přidělí něčemu jinému, `acquire_lock` ho vyhodnotí jako živý
+      a Hunter pak **při každém probuzení jen zapíše „jina instance
+      hunter.sh uz bezi, koncim" a skončí** — tiše, navždy. Přesně to
+      se stalo 2026-09-01 20:12 a zjistilo se to až o dva dny později
+      při nasazení. Kontroluj to při každém zásahu do karty.
 - [ ] Kartu vrátit, `md5sum` porovnat proti build stroji (`sh -n`
       nestačí).
 - [ ] Ruční běh: `sh /tmp/mnt/sdcard/hunter/hunter.sh`, pak v logu čekáš
