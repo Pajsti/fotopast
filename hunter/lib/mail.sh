@@ -5,9 +5,14 @@
 # "kandidat" na dve mista.
 #
 # Zadne hlidani slozky pres inotify - busybox ho nema (viz spec sekce 5).
-# Detekce je rozdil mnozin omezeny cursorem: kandidati = snaps/<den
-# OD CURSORU DAL>/**/*.jpg - sent_list.txt, kazdy proveren snapready
-# (viz test_files/snapready.c) na kompletnost.
+# Detekce je rozdil mnozin omezeny cursorem: kandidati = snaps/<YYMMDD
+# OD CURSORU DAL>/*.jpg - sent_list.txt, kazdy proveren snapready (viz
+# test_files/snapready.c) na kompletnost. Presne DVE urovne, ne "**" -
+# den musi byt slozka s nazvem presne 6 cislic (overeno snap_num6),
+# soubory primo v ni. Skenuje se globem, ne findem (viz nize), takze
+# cokoli hloubeji nebo v jinak pojmenovane slozce je pro automatiku i
+# pro day_fully_sent neviditelne. Predpoklad plocheho stromu je od
+# spec 2026-09-02 zavazny, ne uz jen nahodny - viz tamtez.
 
 # find_ready_candidates
 # Vypise (radek na soubor) cesty ke snimkum, ktere jeste nejsou v
