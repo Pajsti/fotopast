@@ -108,6 +108,11 @@ cursor_advance() {
     _open=""
     for _d in $(list_snap_days); do
         snap_num6 "$_d" || continue
+        # Optimalizace, ne pojistka: vynechani nejnovejsiho dne tu jen
+        # usetri jeden zbytecny day_fully_sent na dni, ktery uz vime, ze
+        # se nikdy neuzavre. I bez tohohle radku by vysledek byl stejny -
+        # "cursor nikdy nepredbehne nejnovejsi den" hlida vyhradne vetev
+        # "else _new=$_newest" nize, pouzita kdyz _open zustane prazdne.
         [ "$_d" -ge "$_newest" ] && continue
         [ -n "$_cur" ] && [ "$_d" -lt "$_cur" ] && continue
         day_fully_sent "$_d" && continue
