@@ -202,6 +202,7 @@ build_cmd_listing() {
     printf '%s QUALITY HD|LOW          kvalita odesilanych fotek\n' "$p"
     printf '%s CONFIRM ON|OFF          potvrzovaci odpovedi\n' "$p"
     printf '%s WIPE CONFIRM            smaze jiz odeslane fotky\n' "$p"
+    printf '%s CLEAR QUEUE             preskoci cekajici fotky (nemaze)\n' "$p"
     printf '%s LIST CMD                tento vypis\n' "$p"
     printf '%s ADD <tel|mail>          pridat opravneneho   [vzdy token]\n' "$pp"
     printf '%s REMOVE <tel|mail>       odebrat opravneneho  [vzdy token]\n' "$pp"
@@ -408,6 +409,23 @@ execute_command() {
             set_config_value CONFIRM OFF
             CONFIRM=OFF
             CMD_REPLY='CONFIRM OFF'
+            ;;
+
+        [Cc][Ll][Ee][Aa][Rr]" "[Qq][Uu][Ee][Uu][Ee])
+            # Jen se nastavi priznak - skutecne preskoceni dela hunter.sh
+            # az po zpracovani VSECH prikazu.
+            #
+            # Musi to tak byt kvuli invariantu 7.1: preskakovani se nesmi
+            # dotknout vyzadanych fotek, a REQUESTED_SNAPS je konecny
+            # teprve, kdyz dobehnou vsechny prikazy daneho probuzeni.
+            # Kdyby v jedne davce prisel CLEAR QUEUE driv nez LAST 2,
+            # oznacil by fotku, kterou ma LAST teprve vyzadat - a ta by
+            # z automatickeho odesilani vypadla natrvalo.
+            #
+            # Proto taky odpoved neobsahuje pocet: v okamziku odeslani
+            # odpovedi jeste neni znam. Loguje se az pri preskoceni.
+            CLEAR_QUEUE_REQUESTED=1
+            CMD_REPLY='QUEUE CLEARED'
             ;;
 
         [Ww][Ii][Pp][Ee]" "[Cc][Oo][Nn][Ff][Ii][Rr][Mm])

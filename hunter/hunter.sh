@@ -47,6 +47,7 @@ RUN_START=$(date +%s)
 RUN_DEADLINE_TS=$((RUN_START + RUN_DEADLINE))
 MAIN_PID=$$
 REQUESTED_SNAPS=""
+CLEAR_QUEUE_REQUESTED=0
 
 if ! acquire_lock; then
     log "jina instance hunter.sh uz bezi, koncim"
@@ -116,6 +117,16 @@ process_sms
 process_mail
 
 snap_list=$(wait_for_candidates)
+
+# CLEAR QUEUE: uzivatel rekl, ze cekajici fotky uz posilat nechce.
+# Soubory zustavaji na karte, jen se oznaci za vyrizene. Bezi to az
+# tady, po zpracovani vsech prikazu, aby byl REQUESTED_SNAPS konecny -
+# skip_snaps vyzadane vynechava (spec 2026-09-02, 5 a 7.1).
+if [ "$CLEAR_QUEUE_REQUESTED" = 1 ] && [ -n "$snap_list" ]; then
+    cleared=$(skip_snaps "$snap_list")
+    log "CLEAR QUEUE: preskoceno $cleared cekajicich fotek"
+    snap_list=""
+fi
 
 # MAX_QUEUE: nedodelek se nesmi nafouknout donekonecna. Co je pres
 # strop, to se NEJSTARSI preskoci - zapisem do sent_list.txt, takze uz

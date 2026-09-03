@@ -36,5 +36,33 @@ assert_contains "nevyzadana fotka do sent_list patri" \
 # --- vychozi hodnota MAX_QUEUE ---
 assert_eq "MAX_QUEUE ma vychozi hodnotu" "$MAX_QUEUE" "100"
 
+# =====================================================================
+# CLEAR QUEUE (spec 2026-09-02, sekce 5)
+# =====================================================================
+
+# --- prikaz jen nastavi priznak, sam nic nemaze ani nezapisuje ---
+: > "$STATE_DIR/sent_list.txt"
+CLEAR_QUEUE_REQUESTED=0
+REQUESTED_SNAPS=""; CMD_REPLY=""
+execute_command "CLEAR QUEUE" 1
+assert_eq "CLEAR QUEUE odpovida bez poctu" "$CMD_REPLY" "QUEUE CLEARED"
+assert_eq "CLEAR QUEUE nastavil priznak" "$CLEAR_QUEUE_REQUESTED" "1"
+assert_eq "CLEAR QUEUE sam nic nezapsal do sent_list" \
+          "$(cat "$STATE_DIR/sent_list.txt")" ""
+assert_eq "CLEAR QUEUE nesmazal zadny soubor" "$([ -f "$S1" ] && echo ano)" "ano"
+
+# --- funguje i bez tokenu (nemeni opravneni, stejne jako WIPE) ---
+CLEAR_QUEUE_REQUESTED=0
+CMD_REPLY=""
+execute_command "CLEAR QUEUE" 0
+assert_eq "CLEAR QUEUE nevyzaduje token" "$CMD_REPLY" "QUEUE CLEARED"
+assert_eq "a priznak nastavi i bez tokenu" "$CLEAR_QUEUE_REQUESTED" "1"
+
+# --- malymi pismeny taky ---
+CLEAR_QUEUE_REQUESTED=0
+CMD_REPLY=""
+execute_command "clear queue" 1
+assert_eq "CLEAR QUEUE je case-insensitive" "$CMD_REPLY" "QUEUE CLEARED"
+
 fixture_teardown
 finish

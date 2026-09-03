@@ -149,4 +149,65 @@ assert_contains "F: zbyle tri se odeslaly" "$ms" "020000"
 
 subproc_fixture_teardown
 
+# =====================================================================
+# G: CLEAR QUEUE mailem - nic se neodesle, nic se nesmaze
+# =====================================================================
+subproc_fixture_setup 3 3
+
+subproc_mk_snap 260828 010000
+subproc_mk_snap 260828 020000
+subproc_mk_snap 260829 030000
+
+printf 'UIDVALIDITY|1\nMSG|10|paja.stindl@seznam.cz|HUNTER tajnytoken1 CLEAR QUEUE\n' \
+    > "$FIX/mail_listing.txt"
+
+subproc_run_hunter
+
+ms=$(cat "$FIX/mailsend.log" 2>/dev/null)
+sl=$(cat "$HDIR/state/sent_list.txt" 2>/dev/null)
+
+# odpoved na prikaz se posila (bez prilohy), fotky NE (ty maji --attach)
+assert_eq "G: neodesla se ani jedna fotka" \
+          "$(printf '%s\n' "$ms" | grep -c -- '--attach')" "0"
+assert_contains "G: log rekl kolik preskocil" \
+                "$(cat "$HDIR/log.txt")" "CLEAR QUEUE: preskoceno 3"
+assert_contains "G: vsechny tri jsou v sent_list" "$sl" "010000"
+assert_contains "G: vsechny tri jsou v sent_list (2)" "$sl" "020000"
+assert_contains "G: vsechny tri jsou v sent_list (3)" "$sl" "030000"
+assert_eq "G: soubory zustaly na karte" \
+          "$([ -f "$SDCARD/snaps/260829/030000_000_65535_P.jpg" ] && echo ano)" "ano"
+
+subproc_fixture_teardown
+
+# =====================================================================
+# H: INVARIANT 7.1 - CLEAR QUEUE prijde v davce DRIV nez LAST, a presto
+# se vyzadana fotka musi odeslat a NESMI skoncit v sent_list.txt.
+#
+# Tohle je duvod, proc CLEAR QUEUE jen nastavuje priznak misto aby
+# preskakoval hned. Kdyby preskakoval hned, oznacil by fotku, kterou ma
+# LAST teprve vyzadat - a ta by z automatickeho odesilani vypadla
+# NATRVALO, tise a bez stopy v logu.
+# =====================================================================
+subproc_fixture_setup 3 3
+
+subproc_mk_snap 260828 010000
+subproc_mk_snap 260828 020000
+subproc_mk_snap 260829 030000
+
+printf 'UIDVALIDITY|1\nMSG|10|paja.stindl@seznam.cz|HUNTER tajnytoken1 CLEAR QUEUE\nMSG|11|paja.stindl@seznam.cz|HUNTER tajnytoken1 LAST 1\n' \
+    > "$FIX/mail_listing.txt"
+
+subproc_run_hunter
+
+ms=$(cat "$FIX/mailsend.log" 2>/dev/null)
+sl=$(cat "$HDIR/state/sent_list.txt" 2>/dev/null)
+
+assert_contains "H: vyzadana fotka se PRESTO odeslala" "$ms" "030000"
+assert_not_contains "H: a NENI v sent_list (jinak by z automatiky vypadla navzdy)" \
+                    "$sl" "030000"
+assert_contains "H: nevyzadane preskocene v sent_list jsou" "$sl" "010000"
+assert_contains "H: nevyzadane preskocene v sent_list jsou (2)" "$sl" "020000"
+
+subproc_fixture_teardown
+
 finish

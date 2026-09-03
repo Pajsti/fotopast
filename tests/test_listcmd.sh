@@ -20,5 +20,7 @@ assert_contains "hlavicka SENDER"          "$CMD_REPLY" "auth mode: SENDER"
 assert_contains "STATUS bez tokenu"        "$CMD_REPLY" "HUNTER STATUS"
 assert_contains "AUTH TYPE porad s tokenem" "$CMD_REPLY" "HUNTER <token> AUTH TYPE"
 
+assert_contains "LIST CMD zna CLEAR QUEUE" "$(build_cmd_listing)" "CLEAR QUEUE"
+
 fixture_teardown
 finish
