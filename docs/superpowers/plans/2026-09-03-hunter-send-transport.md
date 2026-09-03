@@ -857,7 +857,7 @@ Za dnešní větve `list` a `seen` přidej:
         m.subject = ap_subject;
         m.body = ap_body;
         m.attach = ap_attach;
-        /* Datum necháváme na serveru - hodiny zarizeni nemaji zalohu a
+        /* Datum nechavame na serveru - hodiny zarizeni nemaji zalohu a
          * INTERNALDATE ze serveru je spolehlivejsi. */
         m.date = NULL;
 
