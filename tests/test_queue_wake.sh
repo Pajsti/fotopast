@@ -247,4 +247,30 @@ assert_eq "I: odmitany soubor zustal na karte" \
 
 subproc_fixture_teardown
 
+# =====================================================================
+# J: SMTP selze, fotka se ulozi pres IMAP a do sent_list.txt se
+# dostane PRAVE JEDNOU (spec 4.1 + 8)
+# =====================================================================
+subproc_fixture_setup 8
+subproc_mk_snap 260828 010000
+
+# SEND_TRANSPORT se do configu dopisuje az tady, aby ostatni scenare
+# jely na vychozim smtp.
+printf 'SEND_TRANSPORT=smtp-imap\nIMAP_SAVE_FOLDER=Fotopast\n' >> "$HDIR/config.txt"
+# mailsend selze, mailrecv append projde
+echo 1 > "$FIX/mailsend_rc"
+
+subproc_run_hunter
+
+sl=$(cat "$HDIR/state/sent_list.txt" 2>/dev/null)
+ap=$(cat "$FIX/append.log" 2>/dev/null)
+
+assert_contains "J: SMTP se zkusilo" "$(cat "$FIX/mailsend.log")" "010000"
+assert_contains "J: po selhani SMTP se ulozilo pres IMAP append" "$ap" "Fotopast"
+assert_contains "J: fotka je v sent_list" "$sl" "010000"
+assert_eq "J: v sent_list je PRAVE JEDEN zaznam" \
+    "$(printf '%s\n' "$sl" | grep -c '010000')" "1"
+
+subproc_fixture_teardown
+
 finish

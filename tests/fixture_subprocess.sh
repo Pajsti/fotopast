@@ -92,12 +92,14 @@ EOF
 
     # mailrecv cte z $FIX/mail_listing.txt (vychozi prazdny = zadny mail)
     : > "$FIX/mail_listing.txt"
+    : > "$FIX/append.log"
     cat > "$HDIR/bin/mailrecv" <<EOF
 #!/bin/sh
 for a in "\$@"; do
   case "\$a" in
     list) cat "$FIX/mail_listing.txt" 2>/dev/null; exit 0 ;;
     seen) shift; echo "\$@" >> "$FIX/mail_seen.log"; exit 0 ;;
+    append) echo "\$@" >> "$FIX/append.log"; exit \$(cat "$FIX/append_rc" 2>/dev/null || echo 0) ;;
   esac
 done
 exit 0
@@ -107,7 +109,7 @@ EOF
     cat > "$HDIR/bin/mailsend" <<EOF
 #!/bin/sh
 echo "\$@" >> "$FIX/mailsend.log"
-exit 0
+exit \$(cat "$FIX/mailsend_rc" 2>/dev/null || echo 0)
 EOF
     chmod +x "$HDIR/bin/mailsend"
 
