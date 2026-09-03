@@ -33,6 +33,93 @@ static int buf_sink(const char *b, size_t n, void *ctx)
     return 0;
 }
 
+/* Vytvori docasny soubor o n bajtech a otestuje na nem prilohovou vetev,
+ * kterou zadny jiny test v tomhle souboru nezkousi (m.attach je jinde
+ * vzdy NULL). Jadro overeni je stejne jako u testu bez prilohy:
+ * mimemsg_size musi predpovedet presne to, co mimemsg_emit posle - na
+ * tom stoji IMAP APPEND {n} v mailrecv.c.
+ *
+ * Velikosti volane z main() schvalne sedi na hranice base64 radkovani
+ * (57 vstupnich bajtu = 76 znaku vystupu, viz emit_base64_file v
+ * mimemsg.c), aby test prosel i pres hranici mezi jednim a dvema
+ * radky prilohy. */
+static void test_attach(size_t n)
+{
+    static const char *path = "mimemsg_test_attach.tmp";
+    /* Stejna boundary konstanta jako soukroma static v mimemsg.c - neni
+     * vytazena do mimemsg.h (viz komentar tam), test na ni saha
+     * zamerne, aby overil presny konec zpravy. */
+    static const char *tail = "\r\n--hunter-XBOUND-8f2a--\r\n";
+    struct mimemsg m;
+    struct buf out = { NULL, 0, 0 };
+    FILE *f;
+    size_t i, counted = 0, tailn = strlen(tail);
+    char what[96];
+    int longline;
+
+    f = fopen(path, "wb");
+    if (!f) {
+        snprintf(what, sizeof(what), "priloha %lu B: docasny soubor jde vytvorit",
+                 (unsigned long)n);
+        ok(what, 0);
+        return;
+    }
+    for (i = 0; i < n; i++) {
+        unsigned char b = (unsigned char)(i * 37 + 11);
+        if (fwrite(&b, 1, 1, f) != 1) break;
+    }
+    fclose(f);
+
+    memset(&m, 0, sizeof(m));
+    m.from = "fotopast@example.com";
+    m.to = "me@example.com";
+    m.subject = "HUNTER priloha test";
+    m.body = "priloha test\n";
+    m.attach = path;
+    m.date = NULL;
+
+    snprintf(what, sizeof(what), "priloha %lu B: mimemsg_size projde", (unsigned long)n);
+    ok(what, mimemsg_size(&m, &counted) == 0);
+
+    snprintf(what, sizeof(what), "priloha %lu B: mimemsg_emit projde", (unsigned long)n);
+    ok(what, mimemsg_emit(&m, buf_sink, &out) == 0);
+
+    snprintf(what, sizeof(what), "priloha %lu B: spocitana velikost == odeslana",
+             (unsigned long)n);
+    ok(what, counted == out.len);
+
+    /* zadny radek base64 nesmi prekrocit 76 znaku */
+    longline = 0;
+    {
+        const char *disp = strstr(out.p, "Content-Disposition: attachment");
+        const char *p = disp ? strstr(disp, "\r\n\r\n") : NULL;
+
+        if (!p) {
+            longline = 1;   /* priloha se v zprave vubec nenasla */
+        } else {
+            p += 4;
+            while (*p) {
+                const char *nl = strstr(p, "\r\n");
+                size_t len = nl ? (size_t)(nl - p) : strlen(p);
+                if (len >= 2 && p[0] == '-' && p[1] == '-') break;
+                if (len > 76) longline = 1;
+                if (!nl) break;
+                p = nl + 2;
+            }
+        }
+    }
+    snprintf(what, sizeof(what), "priloha %lu B: zadny radek base64 nad 76 znaku",
+             (unsigned long)n);
+    ok(what, !longline);
+
+    snprintf(what, sizeof(what), "priloha %lu B: zprava konci uzaviraci boundary",
+             (unsigned long)n);
+    ok(what, out.len >= tailn && strcmp(out.p + out.len - tailn, tail) == 0);
+
+    free(out.p);
+    remove(path);
+}
+
 int main(void)
 {
     struct mimemsg m;
@@ -94,6 +181,15 @@ int main(void)
 
     free(plain.p);
     free(stuffed.p);
+
+    /* --- priloha: velikosti kolem hranic base64 radkovani (57 vstup-
+     * nich bajtu = 76 znaku vystupu jeden radek) --- */
+    {
+        static const size_t sizes[] = { 1, 2, 3, 56, 57, 58, 115 };
+        size_t k;
+        for (k = 0; k < sizeof(sizes) / sizeof(sizes[0]); k++)
+            test_attach(sizes[k]);
+    }
 
     printf("\nselhalo: %d\n", fails);
     return fails ? 1 : 0;
