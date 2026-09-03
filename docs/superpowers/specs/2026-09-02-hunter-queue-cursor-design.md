@@ -322,6 +322,12 @@ přijatelné. Obojí zůstává.
    byla samostatný `state/skipped.txt`, který by `WIPE` respektoval.
    Musí být zdokumentováno u `MAX_QUEUE` v `config.txt.example` i v
    `hunter/README.md`.
+
+   Od 2026-09-03 se to týká i **poškozených souborů**, které nově
+   uzavírá `CLEAR QUEUE` (sekce 5) — i ty skončí v `sent_list.txt` a
+   `WIPE CONFIRM` je z karty smaže. Potvrzeno majitelem projektu
+   (2026-09-03) jako žádoucí: nedopsaný JPEG stejně nikdy nedorazí a
+   jinak by na kartě ležel napořád.
 2. **Skok hodin zpět.** Kdyby se po synchronizaci času zapsal snímek do
    složky dne, která je už za cursorem, automatická větev ho nevyzvedne.
    Zůstává dosažitelný přes `DATE`/`GET`.

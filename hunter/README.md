@@ -111,6 +111,10 @@ to se nemění.
 
 **Pozor:** přeskočené fotky se zapisují do `state/sent_list.txt`, takže
 je pozdější `WIPE CONFIRM` smaže, i když ti nikdy nedorazily mailem.
+Od 2026-09-03 to platí i pro **poškozené soubory**, které `CLEAR QUEUE`
+uzavřel — `WIPE CONFIRM` je z karty smaže stejně jako ostatní. Je to
+záměr: nedopsaný JPEG stejně nikdy nikam nedorazí a jinak by na kartě
+ležel napořád.
 
 **Trvale neúplný snímek — `CLEAR QUEUE` ho teď uzavře.** Když
 `snapready` nějaký soubor natrvalo odmítá (poškozený, nikdy nedopsaný),
