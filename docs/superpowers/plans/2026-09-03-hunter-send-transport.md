@@ -1222,7 +1222,7 @@ echo 1 > "$FIX/mailsend_rc"
 
 subproc_run_hunter
 
-sl=$(cat "$STATE_DIR/sent_list.txt" 2>/dev/null)
+sl=$(cat "$HDIR/state/sent_list.txt" 2>/dev/null)
 ap=$(cat "$FIX/append.log" 2>/dev/null)
 
 assert_contains "I: SMTP se zkusilo" "$(cat "$FIX/mailsend.log")" "010000"
