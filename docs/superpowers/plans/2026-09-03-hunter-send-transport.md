@@ -356,7 +356,7 @@ Vytvoř `test_files/mimemsg_test.c`:
 ```c
 /* mimemsg_test.c - nativni test generatoru zpravy.
  *
- * Prekladá se pro hostitele (make hosttest), ne pro MIPS - overuje
+ * Preklada se pro hostitele (make hosttest), ne pro MIPS - overuje
  * logiku stavby zpravy, ktera na cilove platforme nezavisi.
  */
 #include <stdio.h>
