@@ -7,7 +7,8 @@
  * Pouziti:
  *   mailrecv <host> <port> <user> --pass-file <f> [--ca <f>] list unseen
  *   mailrecv <host> <port> <user> --pass-file <f> [--ca <f>] seen <uid>
- *   mailrecv <host> <port> <user> --pass-file <f> [--ca <f>] append <folder> <rfc822>
+ *   mailrecv <host> <port> <user> --pass-file <f> [--ca <f>] append <slozka>
+ *            --from A --to B --subject S [--body T] [--attach F]
  *
  * Bez --ca je spojeni sifrovane, ale identita serveru se NEOVERUJE (viz
  * tlsnet_handshake) - v ostrem provozu dodej CA svazek, jinak muze

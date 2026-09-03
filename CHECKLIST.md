@@ -226,12 +226,21 @@ příkazy nejsou ve firmwaru vůbec, takže fáze 5 je bezpředmětná.
 - [ ] **Nejdřív ověřit, že se nic nezměnilo.** Bez zásahu do configu je
       `SEND_TRANSPORT=smtp`, takže fotky musí chodit přesně jako dřív.
       Když nechodí, je chyba v refaktoru, ne v novém transportu.
-- [ ] Teprve pak přepnout: do `hunter/config.txt` doplnit
-      `SEND_TRANSPORT=smtp-imap` a `IMAP_SAVE_FOLDER=Fotopast`.
-- [ ] Ostrý test uložení: dočasně zablokovat SMTP (např. `SMTP_PORT`
-      přepsat na nepoužívaný port), počkat na fotku, pak se podívat do
-      složky `Fotopast` v mailovém klientovi. Musí tam být zpráva
-      s přílohou. Pak `SMTP_PORT` vrátit.
+- [ ] **Teprve pak přepnout** — a znamená to druhé kolo s kartou, protože
+      `SEND_TRANSPORT` nejde změnit žádným mailovým příkazem. Rovnou při
+      téže příležitosti připrav i ostrý test uložení:
+  - `sh /tmp/mnt/sdcard/hunter/dev-stop.sh 600`
+  - vytáhnout kartu, do `hunter/config.txt` doplnit
+    `SEND_TRANSPORT=smtp-imap` a `IMAP_SAVE_FOLDER=Fotopast`
+  - a **dočasně** přepsat `SMTP_PORT` na nepoužívaný port, ať SMTP
+    spolehlivě selže a je vidět, že se sáhne po IMAPu
+  - kartu vrátit, `sh /tmp/mnt/sdcard/hunter/dev-resume.sh`
+- [ ] Počkat na fotku a podívat se do složky `Fotopast` v mailovém
+      klientovi — musí tam být zpráva s přílohou. V `log.txt` k tomu
+      patří řádek `SMTP selhalo, zkousim ulozit pres IMAP`.
+- [ ] **Vrátit `SMTP_PORT` zpět** — třetí a poslední kolo s kartou,
+      stejný postup: `dev-stop.sh 600`, vytáhnout, opravit, vrátit,
+      `dev-resume.sh`. Bez toho zůstane odesílání mailem rozbité.
 - [ ] `HUNTER <token> STATUS` → odpověď musí dorazit stejnou cestou jako
       fotky.
 
