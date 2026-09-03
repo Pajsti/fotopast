@@ -73,6 +73,16 @@ AUTH_TYPE=TOKEN
 # MAX_SEND_PER_WAKE, protoze o vyzadane fotky si uzivatel rekl vyslovne.
 REQUEST_MAX=5
 
+# Strop na velikost nedodelku (kolik cekajicich fotek ma vubec smysl
+# drzet). Co je pres strop, to se NEJSTARSI preskoci - soubory na karte
+# zustanou, jen uz se nenabizeji k odeslani. 0 = bez omezeni.
+#
+# POZOR: preskocene fotky se zapisuji do state/sent_list.txt, takze je
+# pozdejsi WIPE CONFIRM smaze, i kdyz ti nikdy nedorazily mailem.
+# Vedome rozhodnuti (2026-09-02) ve prospech jednoduchosti - stejne to
+# plati pro prikaz CLEAR QUEUE.
+MAX_QUEUE=100
+
 # --- Modem / AT port ---
 # ttyUSB2 je hypoteza z rozboru firmwaru: ubia_first drzi ttyUSB0 a
 # ttyUSB1, ttyUSB2 by mel byt volny. NEOVERENO NA ZARIZENI - viz spec

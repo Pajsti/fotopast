@@ -219,6 +219,37 @@ cursor_write() {
     sync
 }
 
+# skip_snaps <seznam cest, radek na soubor>
+# Oznaci fotky za vyrizene, aniz by se odesilaly - zapisem do
+# sent_list.txt. Vypise pocet skutecne preskocenych.
+#
+# Vyzadane fotky (REQUESTED_SNAPS) VYNECHAVA, a to je bezpecnostne
+# nosne: vyzadane se do sent_list.txt zamerne nezapisuji nikdy (viz
+# hunter.sh), protoze jinak by se prvnim vyzadanim oznacily za odeslane
+# a uz NIKDY by neodesly automaticky. Kdyby se tam dostaly tudy,
+# obesla by se ta ochrana zadem - tise a natrvalo
+# (spec 2026-09-02, invariant 7.1).
+skip_snaps() {
+    _cnt=0
+    _nl='
+'
+    _old_ifs="$IFS"
+    IFS="$_nl"
+    for _s in $1; do
+        IFS="$_old_ifs"
+        [ -n "$_s" ] || { IFS="$_nl"; continue; }
+        case "$_nl$REQUESTED_SNAPS$_nl" in
+            *"$_nl$_s$_nl"*) IFS="$_nl"; continue ;;
+        esac
+        printf '%s\n' "$_s" >> "$STATE_DIR/sent_list.txt"
+        _cnt=$((_cnt + 1))
+        IFS="$_nl"
+    done
+    IFS="$_old_ifs"
+    sync
+    printf '%s' "$_cnt"
+}
+
 # load_config
 # config.txt je platny POSIX shell (KLIC=HODNOTA, komentare #), takze se
 # naimportuje primo pres `.` - zadny vlastni parser netreba. Vyplni
@@ -241,6 +272,10 @@ load_config() {
     : "${AUTH_TYPE:=TOKEN}"
     : "${MAIL_MASTERS:=}"
     : "${REQUEST_MAX:=5}"
+    # Strop na velikost nedodelku. Pres nej se NEJSTARSI cekajici fotky
+    # preskoci (zapisem do sent_list.txt), aby se dohaneni nenafouklo
+    # donekonecna. 0 = bez omezeni.
+    : "${MAX_QUEUE:=100}"
     : "${IMAP_PORT:=993}"
     : "${TOKEN_FILE:=$HUNTER_DIR/mail.token}"
     # CA svazek pro overeni certifikatu SMTP/IMAP serveru. PRAZDNY je

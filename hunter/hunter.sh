@@ -117,6 +117,46 @@ process_mail
 
 snap_list=$(wait_for_candidates)
 
+# MAX_QUEUE: nedodelek se nesmi nafouknout donekonecna. Co je pres
+# strop, to se NEJSTARSI preskoci - zapisem do sent_list.txt, takze uz
+# se to nenabizi. Soubory na karte zustavaji.
+#
+# Poradi z find_ready_candidates je chronologicky vzestupne, takze
+# "nejstarsi" jsou proste prvni radky.
+#
+# Bezi to PRED slouchenim s REQUESTED_SNAPS a skip_snaps navic
+# vyzadane sama vynechava - vyzadana fotka se timhle nesmi dostat do
+# sent_list.txt (spec 2026-09-02, 7.1).
+if [ -n "$snap_list" ] && [ "$MAX_QUEUE" -gt 0 ]; then
+    queue_n=$(printf '%s' "$snap_list" | grep -c .)
+    if [ "$queue_n" -gt "$MAX_QUEUE" ]; then
+        drop=$((queue_n - MAX_QUEUE))
+        to_skip=""
+        keep=""
+        i=0
+        old_ifs="$IFS"
+        IFS='
+'
+        for cand in $snap_list; do
+            IFS="$old_ifs"
+            i=$((i + 1))
+            if [ "$i" -le "$drop" ]; then
+                to_skip="$to_skip$cand
+"
+            else
+                keep="$keep$cand
+"
+            fi
+            IFS='
+'
+        done
+        IFS="$old_ifs"
+        skipped=$(skip_snaps "$to_skip")
+        snap_list=$(printf '%s' "$keep")
+        log "fronta pres strop ($queue_n > $MAX_QUEUE): preskoceno $skipped nejstarsich"
+    fi
+fi
+
 # Vyzadane fotky (LAST/DATE/GET) se pripoji k automatickym kandidatum,
 # aby se mrazilo jen jednou a poslalo v jedne davce.
 #
