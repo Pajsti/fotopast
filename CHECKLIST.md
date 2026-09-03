@@ -173,7 +173,7 @@ příkazy nejsou ve firmwaru vůbec, takže fáze 5 je bezpředmětná.
       skončilo restart smyčkou vyvolanou MCU watchdogem.
 - [ ] Vytáhnout kartu a **fyzicky přes čtečku** zkopírovat:
   - `hunter/lib/common.sh`, `hunter/lib/command.sh`, `hunter/lib/mail.sh`,
-    `hunter/lib/status.sh`, `hunter/hunter.sh`
+    `hunter/lib/status.sh`, `hunter/lib/sms.sh`, `hunter/hunter.sh`
 - [ ] **Při té příležitosti dodělat dva resty z fáze 8** (ať se karta
       netahá zbytečně podruhé):
   - zkopírovat `hunter/bin/mailrecv` a `hunter/bin/mailsend` (obsahují
