@@ -26,7 +26,9 @@ MAIL_TOOLS = mailsend mailrecv
 UTIL_TOOLS = snapready logscan
 ALL_TOOLS  = $(AT_TOOLS) $(MAIL_TOOLS) $(UTIL_TOOLS)
 
-.PHONY: all at mail util clean strip
+HOSTCC  ?= cc
+
+.PHONY: all at mail util clean strip hosttest
 
 all: $(ALL_TOOLS)
 
@@ -81,5 +83,12 @@ logscan: logscan.c
 strip: $(ALL_TOOLS)
 	$(STRIP) $(ALL_TOOLS)
 
+# Nativni test generatoru zpravy. mimemsg.c zamerne nezavisi na tlsnet
+# ani na mbedTLS, takze se da prelozit pro hostitele a otestovat.
+hosttest: mimemsg.c mimemsg.h mimemsg_test.c
+	$(HOSTCC) -O2 -Wall -Wextra -std=gnu99 -o mimemsg_test \
+	  mimemsg_test.c mimemsg.c
+	./mimemsg_test
+
 clean:
-	rm -f *.o $(ALL_TOOLS)
+	rm -f *.o $(ALL_TOOLS) mimemsg_test
