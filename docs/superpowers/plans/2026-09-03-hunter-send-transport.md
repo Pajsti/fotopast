@@ -422,9 +422,11 @@ int main(void)
     ok("hlavicka To", strstr(plain.p, "To: <me@example.com>\r\n") != NULL);
     ok("hlavicka Subject", strstr(plain.p, "Subject: HUNTER 260903 121500\r\n") != NULL);
     ok("hlavicka Date", strstr(plain.p, "Date: Wed, 03 Sep 2026 12:15:00 +0000\r\n") != NULL);
-    ok("zprava nekonci SMTP teckou",
-       plain.len >= 5 && strcmp(plain.p + plain.len - 5, "--\r\n") != 0
-       ? 1 : strstr(plain.p, "\r\n.\r\n") == NULL);
+    /* Ukoncovaci tecka je ramovani SMTP - v ciste zprave nesmi byt
+     * vubec, jinak by IMAP literal mel spatnou delku a zprava by se
+     * ve slozce utnula. */
+    ok("cista zprava neobsahuje SMTP ukoncovaci tecku",
+       strstr(plain.p, "\r\n.\r\n") == NULL);
 
     /* --- SMTP sink dot-stuffing dela --- */
     ds.inner = buf_sink;
@@ -725,7 +727,7 @@ V `test_files/mailsend.c`:
     expect(code, 2, "konec DATA", rbuf);
 ```
 
-5. Přidej k ostatním statickým funkcím sink, který zapisuje do soketu:
+5. Přidej sink, který zapisuje do soketu. **Musí být v souboru nad místem, kde ho použiješ** (C potřebuje deklaraci před použitím) — dej ho k ostatním statickým funkcím před `main`:
 
 ```c
 /* Sink pro mimemsg: zapisuje rovnou do TLS spojeni. */
@@ -891,7 +893,7 @@ Za dnešní větve `list` a `seen` přidej:
         if (rc != 0) fprintf(stderr, "mailrecv: APPEND odmitnut\n");
 ```
 
-A k ostatním statickým funkcím sink:
+A sink — **v souboru nad `main`**, aby byl deklarovaný dřív, než ho větev `append` použije:
 
 ```c
 /* Sink pro mimemsg: zapisuje rovnou do TLS spojeni. */
