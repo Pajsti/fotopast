@@ -220,6 +220,13 @@ příkazy nejsou ve firmwaru vůbec, takže fáze 5 je bezpředmětná.
       `hunter/lib/*.sh` a `hunter/bin/*` proti repu; zkopírovat vše, co
       se liší. Tahle změna se dotýká `lib/common.sh`, `lib/mail.sh` a
       **obou binárek** `bin/mailsend` i `bin/mailrecv`.
+- [ ] **Ověřit, že na kartě je opravdu nová binárka** (md5 to chytí jen
+      tehdy, když se binárky vůbec přeložily — jednou se na to zapomnělo
+      a nikdo si nevšiml):
+      ```sh
+      /tmp/mnt/sdcard/hunter/bin/mailrecv 2>&1 | grep -q append \
+        && echo "OK, umi append" || echo "STARA BINARKA"
+      ```
 - [ ] **Zkontrolovat `hunter/state/.lock`** — když tam je, smazat ho.
       Viz fáze 9, proč na to nezapomínat.
 - [ ] Kartu vrátit, `dev-resume.sh`.

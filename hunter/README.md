@@ -180,6 +180,11 @@ fotopasti; `SMTP_TO` může být jiná adresa, ale `APPEND` umí jen tentýž
 přečetl jako příchozí příkazy. Když tam INBOX napíšeš, kód ho odmítne
 a použije `Fotopast`.
 
+`IMAP_SAVE_FOLDER` by měl být jednoduchý název bez vnořování — oddělovač
+hierarchie složek si určuje server sám (`.` u jednoho, `/` u druhého) a
+`CREATE` vnořené složky na serverech, které vyžadují existující rodičovskou
+složku, selže.
+
 ## Co je hotové a jak je to ověřené
 
 ### Ověřeno přímo na reálném zařízení (ne jen v simulaci)
