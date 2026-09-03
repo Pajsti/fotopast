@@ -244,6 +244,19 @@ Prakticky: přeskakování pracuje výhradně nad automatickou množinou
 kandidátů, a vyžádané z ní musí být vyňaty **dřív**, než se cokoli
 zapíše — tedy před spojením obou množin.
 
+Ochrana je záměrně zdvojená a obě poloviny jsou nosné, ne duplicitní.
+Bloky `CLEAR QUEUE`/`MAX_QUEUE` v `hunter.sh` běží **před** odstraněním
+překryvu s `REQUESTED_SNAPS` (to přichází až u sloučení množin, výše) —
+`snap_list`, se kterým obě pracují, tedy v tu chvíli ještě může
+obsahovat právě vyžádanou fotku. Jediné, co ji tam chrání, je vlastní
+kontrola `REQUESTED_SNAPS` v `skip_snaps` (`lib/common.sh`) přímo v
+místě zápisu do `sent_list.txt`. Mutační test potvrdil obě poloviny
+zvlášť — odebrání kterékoli z nich pustí reálné selhání. Je to vědomé
+"belt-and-braces" pro invariant, jehož porušení je tiché a trvalé (fotka
+navždy vypadne z automatiky bez jakékoli chybové hlášky) — příští čtenář
+ať jednu z těch dvou kontrol "nezjednoduší" pryč v domnění, že je
+zbytečná.
+
 ## 8. Oprava `LAST N`
 
 Dvě změny, obě uvnitř `snap_newer()` a `request_last()`. Dosah je
