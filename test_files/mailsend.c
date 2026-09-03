@@ -45,6 +45,10 @@ static const char b64tab[] =
 
 /* ---------------------------------------------------------------- base64 */
 
+/* Druha kopie teto funkce je v mimemsg.c - tam je pro base64 kodovani
+ * prilohy, tady pro AUTH LOGIN/AUTH PLAIN. Neni sdilena schvalne, viz
+ * komentar u mimemsg.h. */
+
 /* Zakoduje n bajtu do out (out musi mit aspon 4*ceil(n/3)+1). */
 static void b64_encode(const unsigned char *in, size_t n, char *out)
 {
@@ -324,7 +328,7 @@ int main(int argc, char **argv)
         m.body = body;
         m.attach = attach;
         m.date = datebuf;
-        m.progname = argv[0];
+        m.progname = "mailsend";
 
         ds.inner = smtp_sink;
         ds.inner_ctx = NULL;

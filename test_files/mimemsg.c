@@ -13,6 +13,10 @@ static const char b64tab[] =
 
 /* ---------------------------------------------------------------- base64 */
 
+/* Druha kopie teto funkce je v mailsend.c - tam je pro AUTH LOGIN/AUTH
+ * PLAIN, tady pro base64 kodovani prilohy. Neni sdilena schvalne, viz
+ * komentar u mimemsg.h. */
+
 /* Zakoduje n bajtu do out (out musi mit aspon 4*ceil(n/3)+1). */
 static void b64_encode(const unsigned char *in, size_t n, char *out)
 {
@@ -79,6 +83,11 @@ static int emit_base64_file(FILE *f, mimemsg_sink sink, void *ctx)
         if (put(sink, ctx, out) < 0) return -1;
         if (put(sink, ctx, "\r\n") < 0) return -1;
     }
+    /* Kratke cteni (vytazena SD karta, I/O chyba) by jinak tise skoncilo
+     * cyklus, jako by priloha byla u konce - mimemsg_size i mimemsg_emit
+     * by se pak shodly na kratsi, ale poskozene priloze a nikdo by si
+     * toho nevsiml. */
+    if (ferror(f)) return -1;
     return 0;
 }
 
