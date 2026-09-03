@@ -305,11 +305,46 @@ přijatelné. Obojí zůstává.
    složky dne, která je už za cursorem, automatická větev ho nevyzvedne.
    Zůstává dosažitelný přes `DATE`/`GET`.
 3. **Den, který nikdy nedoteče.** Trvale neúplný soubor (`snapready` ho
-   nikdy nepustí) drží cursor na svém dni napořád — `MAX_QUEUE` ho
-   přeskočí jen tehdy, když nedodělek naroste přes strop; jediný
-   zaseklý soubor pod stropem se sám nevyřeší. Dopad je ale omezený:
-   prochází se navíc jedna složka dne za probuzení, ne celá historie.
-   Ruční východisko je `CLEAR QUEUE`.
+   nikdy nepustí) drží cursor na svém dni napořád. Ověřeno na 20 složkách
+   dnů s jedním takovým souborem v nejstarší z nich: přes 12 po sobě
+   jdoucích probuzení se `state/cursor.txt` **vůbec nezapíše** a každé
+   probuzení projde všech 20 složek.
+
+   Dopad **není** omezený na "jednu složku navíc za probuzení", jak dřív
+   tvrdil tenhle bod — nic ho neomezuje. Je to celé okno od zaseklého dne
+   po dnešek a roste o jednu další složku s každým dalším dnem, co
+   přibude na kartě, dokud je zaseklý soubor přítomný. Každá složka v
+   okně stojí jeden `fgrep` přes celý `sent_list.txt` (3.1) a
+   `wait_for_candidates` (`lib/mail.sh`) tohle opakuje až
+   `SNAP_WAIT`-krát za probuzení, dokud nedorazí nový snímek nebo
+   nevyprší čas.
+
+   **`CLEAR QUEUE` tohle NEŘEŠÍ** — nejde o mezeru v implementaci, ale o
+   strukturální nemožnost. `CLEAR QUEUE` (přes `skip_snaps`, sekce 5)
+   umí přeskočit jen to, co `find_ready_candidates` vrátí jako
+   kandidáta, a soubor odmítnutý `snapready` kandidátem z definice
+   nikdy není (3.1) — `CLEAR QUEUE` ho tedy nikdy nezapíše do
+   `sent_list.txt` a `day_fully_sent` pro jeho den bude vracet "otevřeno"
+   napořád. `MAX_QUEUE` je ze stejného důvodu bezmocný — soubor se do
+   fronty vůbec nedostane, není co odříznout. `WIPE CONFIRM` maže jen
+   to, co je v `sent_list.txt` — zaseklý soubor tam není. `DATE`/`GET`
+   soubor sice dokážou poslat, ale vyžádané soubory se do
+   `sent_list.txt` schválně nezapisují (invariant 7.1), takže den
+   zůstane otevřený i po nich.
+
+   **Jediné skutečné východisko je fyzický přístup ke kartě** — zaseklý
+   soubor smazat nebo přesunout mimo `snaps/`, případně `cursor.txt`
+   ručně opravit. Vzdálená (e-mailová) cesta ven neexistuje. Operátor se
+   o zaseklém dni aspoň dozví z logu: `cursor_advance` (`lib/mail.sh`)
+   hlásí nejvýš jednou za běh, když je nejstarší otevřený den totožný s
+   dnem, na kterém cursor už stojí, a existuje den novější — spolu s
+   počtem složek, které se teď prohledávají, aby bylo vidět, jak okno
+   roste.
+
+   Zda má `CLEAR QUEUE` takový den rovnou zavírat (tedy počítat
+   "nemůžu poslat" za "vyřízeno"), je otevřená otázka pro majitele
+   projektu — spec 5 to dnes neřeší a tenhle dokument to úmyslně
+   nerozhoduje.
 4. **YY přetečení století** v porovnání dnů — zděděné omezení, už
    popsané v [command.sh:254-256](../../../hunter/lib/command.sh#L254-L256).
 

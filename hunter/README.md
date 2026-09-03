@@ -109,6 +109,16 @@ zůstanou na kartě, jen se přestanou nabízet. Totéž dělá automaticky
 **Pozor:** přeskočené fotky se zapisují do `state/sent_list.txt`, takže
 je pozdější `WIPE CONFIRM` smaže, i když ti nikdy nedorazily mailem.
 
+**Trvale neúplný snímek je zvláštní případ, který `CLEAR QUEUE`
+NEŘEŠÍ.** Když `snapready` nějaký soubor natrvalo odmítá (poškozený,
+nikdy nedopsaný), nikdy se nestane kandidátem — `CLEAR QUEUE` ani
+`MAX_QUEUE` ho tedy nemají jak přeskočit a jeho den zůstává navždy
+otevřený. Prohledávané okno dnů pak roste o jeden den denně, dokud je
+soubor na kartě. Jediná cesta ven je fyzický přístup ke kartě (podrobně
+v [2026-09-02-hunter-queue-cursor-design.md](../docs/superpowers/specs/2026-09-02-hunter-queue-cursor-design.md),
+sekce 9, bod 3). V `log.txt` se to pozná podle opakujícího se hlášení
+`cursor zasekly na ...`.
+
 **Autorizace:** výchozí `AUTH_TYPE=TOKEN` vyžaduje platný token i
 odesílatele v `MAIL_MASTERS`. `AUTH_TYPE=SENDER` stačí jen odesílatel
 — ale hlavička `From` jde podvrhnout, takže i v tomhle režimu příkazy
