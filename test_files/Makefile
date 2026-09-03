@@ -62,10 +62,13 @@ smsrecv: smsrecv.o atport.o
 tlsnet.o: tlsnet.c tlsnet.h
 	$(CC) $(CFLAGS) -I"$(MBEDTLS)/include" -c -o $@ $<
 
-mailsend: mailsend.c tlsnet.o
+mimemsg.o: mimemsg.c mimemsg.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+mailsend: mailsend.c tlsnet.o mimemsg.o
 	@test -d "$(MBEDTLS)/include" || \
 	  { echo "chybi mbedTLS v $(MBEDTLS) - spust nejdriv ./build.sh"; exit 1; }
-	$(CC) $(CFLAGS) -I"$(MBEDTLS)/include" -o $@ mailsend.c tlsnet.o \
+	$(CC) $(CFLAGS) -I"$(MBEDTLS)/include" -o $@ mailsend.c tlsnet.o mimemsg.o \
 	  -L"$(MBEDTLS)/lib" -lmbedtls -lmbedx509 -lmbedcrypto $(LDFLAGS)
 
 mailrecv: mailrecv.c tlsnet.o

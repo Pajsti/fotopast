@@ -27,6 +27,7 @@
 #include <errno.h>
 
 #include "tlsnet.h"
+#include "mimemsg.h"
 
 #define RBUF_SZ 4096
 
@@ -142,51 +143,12 @@ static void expect(int code, int want, const char *step, const char *rbuf)
 
 /* ------------------------------------------------------------------ MIME */
 
-static const char *basename_of(const char *path)
+/* Sink pro mimemsg: zapisuje rovnou do TLS spojeni. */
+static int smtp_sink(const char *buf, size_t len, void *ctx)
 {
-    const char *s = strrchr(path, '/');
-    return s ? s + 1 : path;
-}
-
-/* Telo mailu po radcich, s dot-stuffingem (radek zacinajici teckou by
- * jinak SMTP ukoncil). */
-static void send_text_dotstuffed(const char *text)
-{
-    const char *p = text;
-
-    while (*p) {
-        const char *nl = strchr(p, '\n');
-        size_t len = nl ? (size_t)(nl - p) : strlen(p);
-        char line[1024];
-
-        if (len > sizeof(line) - 4) len = sizeof(line) - 4;
-        if (len > 0 && p[0] == '.') tlsnet_write(".", 1);
-        memcpy(line, p, len);
-        line[len] = '\0';
-        /* useknout pripadny \r na konci, doplnime vlastni CRLF */
-        if (len > 0 && line[len - 1] == '\r') line[len - 1] = '\0';
-        tlsnet_write(line, strlen(line));
-        tlsnet_write("\r\n", 2);
-
-        if (!nl) break;
-        p = nl + 1;
-    }
-}
-
-/* 57 vstupnich bajtu = 76 znaku base64. Drzi radky pod limitem 998
- * znaku z RFC 5322 - stara verze mlela po 750 bajtech, tedy 1000 znaku,
- * a cast serveru to odmita. */
-static void send_base64_file(FILE *f)
-{
-    unsigned char in[57];
-    char out[80];
-    size_t n;
-
-    while ((n = fread(in, 1, sizeof(in), f)) > 0) {
-        b64_encode(in, n, out);
-        tlsnet_write(out, strlen(out));
-        tlsnet_write("\r\n", 2);
-    }
+    (void)ctx;
+    tlsnet_write(buf, len);
+    return 0;
 }
 
 static void rfc_date(char *buf, size_t len)
@@ -244,9 +206,7 @@ int main(int argc, char **argv)
     int tlsmode = -1;
     int i, code;
     char rbuf[RBUF_SZ];
-    char line[2048];
     char datebuf[64];
-    const char *boundary = "hunter-XBOUND-8f2a";
 
     tlsnet_set_progname("mailsend");
 
@@ -352,44 +312,30 @@ int main(int argc, char **argv)
     expect(code, 3, "DATA", rbuf);
 
     rfc_date(datebuf, sizeof(datebuf));
-    snprintf(line, sizeof(line),
-             "From: <%s>\r\n"
-             "To: <%s>\r\n"
-             "Subject: %s\r\n"
-             "Date: %s\r\n"
-             "MIME-Version: 1.0\r\n"
-             "Content-Type: multipart/mixed; boundary=\"%s\"\r\n"
-             "\r\n"
-             "--%s\r\n"
-             "Content-Type: text/plain; charset=us-ascii\r\n"
-             "Content-Transfer-Encoding: 7bit\r\n"
-             "\r\n",
-             from, to, subject, datebuf, boundary, boundary);
-    tlsnet_write(line, strlen(line));
 
-    send_text_dotstuffed(body);
+    {
+        struct mimemsg m;
+        struct mimemsg_dotstuff ds;
 
-    if (attach) {
-        FILE *f = fopen(attach, "rb");
-        if (!f) {
-            fprintf(stderr, "mailsend: prilohu %s nelze otevrit, posilam bez ni\n",
-                    attach);
-        } else {
-            snprintf(line, sizeof(line),
-                     "\r\n--%s\r\n"
-                     "Content-Type: image/jpeg; name=\"%s\"\r\n"
-                     "Content-Transfer-Encoding: base64\r\n"
-                     "Content-Disposition: attachment; filename=\"%s\"\r\n"
-                     "\r\n",
-                     boundary, basename_of(attach), basename_of(attach));
-            tlsnet_write(line, strlen(line));
-            send_base64_file(f);
-            fclose(f);
-        }
+        memset(&m, 0, sizeof(m));
+        m.from = from;
+        m.to = to;
+        m.subject = subject;
+        m.body = body;
+        m.attach = attach;
+        m.date = datebuf;
+
+        ds.inner = smtp_sink;
+        ds.inner_ctx = NULL;
+        ds.at_line_start = 1;
+
+        if (mimemsg_emit(&m, mimemsg_dotstuff_sink, &ds) < 0)
+            tlsnet_die(1, "zpravu se nepodarilo odeslat");
     }
 
-    snprintf(line, sizeof(line), "\r\n--%s--\r\n.\r\n", boundary);
-    tlsnet_write(line, strlen(line));
+    /* Ukoncovaci tecka je ramovani SMTP, ne soucast zpravy - proto
+     * ji pridava mailsend, ne mimemsg. */
+    tlsnet_write("\r\n.\r\n", 5);
 
     code = smtp_read_reply(rbuf, sizeof(rbuf));
     expect(code, 2, "konec DATA", rbuf);
