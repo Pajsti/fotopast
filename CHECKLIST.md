@@ -211,6 +211,30 @@ příkazy nejsou ve firmwaru vůbec, takže fáze 5 je bezpředmětná.
 - [ ] `sh /tmp/mnt/sdcard/hunter/dev-resume.sh` (reboot), sledovat pár
       přirozených probuzení.
 
+## Fáze 10 — aktualizace: volitelný transport (2026-09-03)
+
+- [ ] `sh /tmp/mnt/sdcard/hunter/dev-stop.sh 600` — **a pak pracovat
+      svižně**. Historie z fáze 8: držet `ubia_first` mrtvý přes hodinu
+      skončilo restart smyčkou vyvolanou MCU watchdogem.
+- [ ] Vytáhnout kartu a **porovnat md5 všech** `hunter/*.sh`,
+      `hunter/lib/*.sh` a `hunter/bin/*` proti repu; zkopírovat vše, co
+      se liší. Tahle změna se dotýká `lib/common.sh`, `lib/mail.sh` a
+      **obou binárek** `bin/mailsend` i `bin/mailrecv`.
+- [ ] **Zkontrolovat `hunter/state/.lock`** — když tam je, smazat ho.
+      Viz fáze 9, proč na to nezapomínat.
+- [ ] Kartu vrátit, `dev-resume.sh`.
+- [ ] **Nejdřív ověřit, že se nic nezměnilo.** Bez zásahu do configu je
+      `SEND_TRANSPORT=smtp`, takže fotky musí chodit přesně jako dřív.
+      Když nechodí, je chyba v refaktoru, ne v novém transportu.
+- [ ] Teprve pak přepnout: do `hunter/config.txt` doplnit
+      `SEND_TRANSPORT=smtp-imap` a `IMAP_SAVE_FOLDER=Fotopast`.
+- [ ] Ostrý test uložení: dočasně zablokovat SMTP (např. `SMTP_PORT`
+      přepsat na nepoužívaný port), počkat na fotku, pak se podívat do
+      složky `Fotopast` v mailovém klientovi. Musí tam být zpráva
+      s přílohou. Pak `SMTP_PORT` vrátit.
+- [ ] `HUNTER <token> STATUS` → odpověď musí dorazit stejnou cestou jako
+      fotky.
+
 ## Prvních pár dní sledovat
 
 - [ ] Žádné neočekávané restarty (smyčka resetů = watchdog problém).

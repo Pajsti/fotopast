@@ -145,6 +145,41 @@ Zdrojáky: `bin/mailrecv` (IMAP klient), `lib/command.sh` (vykonavač,
 sdílený s mrtvou SMS větví), `lib/mailcmd.sh` (transport). Plný spec a
 implementační plán viz odkazy nahoře.
 
+### Kudy fotky odcházejí
+
+Výchozí je klasické odeslání mailem přes SMTP. `SEND_TRANSPORT` v
+configu ale umí i uložit zprávu přes **IMAP APPEND** do složky na
+tomtéž účtu (`IMAP_SAVE_FOLDER`, výchozí `Fotopast`) — buď místo mailu,
+nebo jako záloha, když SMTP selže.
+
+| Hodnota | Co dělá |
+|---|---|
+| `smtp` | jen mailem (výchozí, dosavadní chování) |
+| `imap` | jen uložit do složky |
+| `smtp-imap` | mailem; když SMTP selže, uložit do složky |
+| `imap-smtp` | do složky; když IMAP selže, poslat mailem |
+| `smtp+imap` | obojí vždy, dvě kopie |
+
+**Proč to existuje:** odesílání SMTP přímo z mobilní SIM vypadá pro
+operátora jako spam bot a O2 kvůli tomu jednou zablokovalo celou SIM,
+data i volání. IMAP APPEND je totéž spojení na port 993, jaké zařízení
+stejně dělá kvůli příkazům — heuristika nemá co chytit.
+
+Nastavení platí **i pro odpovědi na příkazy**. Když je SMTP zablokované,
+odpověď na `STATUS` se objeví ve složce.
+
+**Příjem příkazů to neovlivňuje** — ten jde přes IMAP vždycky.
+
+**Co za to:** zpráva uložená do složky nedorazí jako nová pošta, takže
+nepřijde notifikace — do složky se musíš podívat. A uloží se jen na účet
+fotopasti; `SMTP_TO` může být jiná adresa, ale `APPEND` umí jen tentýž
+účet, přes který se přihlašuje.
+
+`IMAP_SAVE_FOLDER` **nesmí být `INBOX`**: příkazy se hledají přes
+`SEARCH UNSEEN` právě tam, takže by si Hunter vlastní uložené fotky
+přečetl jako příchozí příkazy. Když tam INBOX napíšeš, kód ho odmítne
+a použije `Fotopast`.
+
 ## Co je hotové a jak je to ověřené
 
 ### Ověřeno přímo na reálném zařízení (ne jen v simulaci)
