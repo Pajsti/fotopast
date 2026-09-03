@@ -20,7 +20,8 @@ přímo na zařízení — k 2026-09-01 je vyřešená většina bodů.
     ├── config.txt          ← zkopíruj a uprav z config.txt.example
     ├── smtp.pass           ← vytvoř ručně, viz níže
     ├── mail.token           ← vytvoř ručně, viz níže (příkazový kanál)
-    └── state/
+    └── state/             ← sent_list.txt, mail_seen.txt, sms_seen.txt,
+                              cursor.txt (posledni vyrizeny den)
 ```
 
 `ubia_test` musí zůstat v **kořeni karty** — ta cesta je napevno
@@ -87,6 +88,7 @@ HUNTER <token> GET <jmeno>             konkretni soubor
 HUNTER <token> QUALITY HD|LOW          kvalita odesilanych fotek
 HUNTER <token> CONFIRM ON|OFF          potvrzovaci odpovedi
 HUNTER <token> WIPE CONFIRM            smaze jiz odeslane fotky
+HUNTER <token> CLEAR QUEUE             preskoci cekajici fotky (nemaze)
 HUNTER <token> LIST CMD                vypis prikazu (dle aktualniho rezimu)
 HUNTER <token> ADD <tel|mail>          pridat opravneneho    [vzdy token]
 HUNTER <token> REMOVE <tel|mail>       odebrat opravneneho   [vzdy token]
@@ -98,6 +100,14 @@ HUNTER <token> FOTO                    nepodporovano
 
 Pošli `HUNTER <token> LIST CMD` pro aktuální výpis (mění se podle
 `AUTH_TYPE`).
+
+**Fronta.** `STATUS` hlásí `FRONTA:<N>` — kolik fotek čeká na odeslání.
+Když je nedodělek zbytečně velký, `CLEAR QUEUE` ho vyprázdní: fotky
+zůstanou na kartě, jen se přestanou nabízet. Totéž dělá automaticky
+`MAX_QUEUE` v configu, když fronta přeroste strop (přeskočí nejstarší).
+
+**Pozor:** přeskočené fotky se zapisují do `state/sent_list.txt`, takže
+je pozdější `WIPE CONFIRM` smaže, i když ti nikdy nedorazily mailem.
 
 **Autorizace:** výchozí `AUTH_TYPE=TOKEN` vyžaduje platný token i
 odesílatele v `MAIL_MASTERS`. `AUTH_TYPE=SENDER` stačí jen odesílatel
@@ -157,6 +167,11 @@ s explicitními rozsahy (ne POSIX třídy — `FEATURE_TR_CLASSES` je
 volitelný compile-time přepínač bez jistoty přítomnosti). Testovací
 harness je v [../tests/](../tests/) (`sh tests/run_tests.sh`, přes
 `dash` jako referenční POSIX shell).
+
+Škálování na tisíce fotek je řešené cursorem (`state/cursor.txt`) —
+automatická větev prochází jen dny od posledního vyřízeného dál, ne
+celou historii. Detaily a měření v
+[2026-09-02-hunter-queue-cursor-design.md](../docs/superpowers/specs/2026-09-02-hunter-queue-cursor-design.md).
 
 Bezpečnostní vrstva e-mailových příkazů (tokeny, autorizace,
 privilegované příkazy) prošla opakovaným mutačním testováním — recenze

@@ -231,6 +231,10 @@ nemá smysl. Detekce je **rozdíl množin**:
 kandidáti = snaps/**/*.jpg  −  sent_list.txt
 ```
 
+> **Aktualizace 2026-09-02:** detekce se od té doby omezuje cursorem —
+> prochází jen dny od posledního vyřízeného dál, ne celou historii. Viz
+> [2026-09-02-hunter-queue-cursor-design.md](2026-09-02-hunter-queue-cursor-design.md).
+
 Snímek se považuje za připravený k odeslání, až když projde **všemi**
 kontrolami:
 

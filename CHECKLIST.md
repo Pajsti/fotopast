@@ -166,6 +166,36 @@ příkazy nejsou ve firmwaru vůbec, takže fáze 5 je bezpředmětná.
 - [ ] `sh /tmp/mnt/sdcard/hunter/dev-resume.sh` (reboot), sledovat pár
       přirozených probuzení stejně jako ve fázi 7.
 
+## Fáze 9 — aktualizace: fronta a cursor (2026-09-02)
+
+- [ ] `sh /tmp/mnt/sdcard/hunter/dev-stop.sh 600` — **a pak pracovat
+      svižně**. Historie z fáze 8: držet `ubia_first` mrtvý přes hodinu
+      skončilo restart smyčkou vyvolanou MCU watchdogem.
+- [ ] Vytáhnout kartu a **fyzicky přes čtečku** zkopírovat:
+  - `hunter/lib/common.sh`, `hunter/lib/command.sh`, `hunter/lib/mail.sh`,
+    `hunter/lib/status.sh`, `hunter/hunter.sh`
+- [ ] **Při té příležitosti dodělat dva resty z fáze 8** (ať se karta
+      netahá zbytečně podruhé):
+  - zkopírovat `hunter/bin/mailrecv` a `hunter/bin/mailsend` (obsahují
+    opravu progname a novou podporu `--ca`)
+  - smazat `hunter/spike_move_test/` a oba snímky z něj vrátit zpět:
+    `121101_000_65535_NH.jpg` → `HDPIC/260831/`,
+    `210948_000_65535_PH.jpg` → `HDPIC/260828/`
+- [ ] Doplnit do `hunter/config.txt` klíč `MAX_QUEUE=100`.
+- [ ] `cursor.txt` **nevytvářet** — chybějící soubor znamená „začni od
+      nejstaršího dne", což je přesně dosavadní chování. Vytvoří se sám.
+- [ ] Kartu vrátit, `md5sum` porovnat proti build stroji (`sh -n`
+      nestačí).
+- [ ] Ruční běh: `sh /tmp/mnt/sdcard/hunter/hunter.sh`, pak v logu čekáš
+      `cursor posunut na <den>` (pokud je co uzavřít) a
+      `cat /tmp/mnt/sdcard/hunter/state/cursor.txt` musí dávat platný
+      `YYMMDD`.
+- [ ] Ostrý test: pošli `HUNTER <token> STATUS` → odpověď musí mít
+      `FRONTA:<N>`. Pak `HUNTER <token> LAST 2` → dvě fotky dorazí i
+      poté, co cursor nějaký den uzavřel.
+- [ ] `sh /tmp/mnt/sdcard/hunter/dev-resume.sh` (reboot), sledovat pár
+      přirozených probuzení.
+
 ## Prvních pár dní sledovat
 
 - [ ] Žádné neočekávané restarty (smyčka resetů = watchdog problém).
