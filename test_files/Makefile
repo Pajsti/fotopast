@@ -71,10 +71,10 @@ mailsend: mailsend.c tlsnet.o mimemsg.o
 	$(CC) $(CFLAGS) -I"$(MBEDTLS)/include" -o $@ mailsend.c tlsnet.o mimemsg.o \
 	  -L"$(MBEDTLS)/lib" -lmbedtls -lmbedx509 -lmbedcrypto $(LDFLAGS)
 
-mailrecv: mailrecv.c tlsnet.o
+mailrecv: mailrecv.c tlsnet.o mimemsg.o
 	@test -d "$(MBEDTLS)/include" || \
 	  { echo "chybi mbedTLS v $(MBEDTLS) - spust nejdriv ./build.sh"; exit 1; }
-	$(CC) $(CFLAGS) -I"$(MBEDTLS)/include" -o $@ mailrecv.c tlsnet.o \
+	$(CC) $(CFLAGS) -I"$(MBEDTLS)/include" -o $@ mailrecv.c tlsnet.o mimemsg.o \
 	  -L"$(MBEDTLS)/lib" -lmbedtls -lmbedx509 -lmbedcrypto $(LDFLAGS)
 
 snapready: snapready.c

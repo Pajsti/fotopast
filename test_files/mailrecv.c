@@ -26,6 +26,7 @@
  *                3 = spatne argumenty.
  */
 #include "tlsnet.h"
+#include "mimemsg.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -174,7 +175,8 @@ static void usage(void)
 {
     fprintf(stderr,
         "pouziti: mailrecv <host> <port> <user> --pass-file <f> "
-        "[--ca <f>] [-v] list unseen | seen <uid>\n");
+        "[--ca <f>] [-v] list unseen | seen <uid> |\n"
+        "         append <slozka> --from A --to B --subject S [--body T] [--attach F]\n");
 }
 
 /* ----------------------------------------------------- hlavicky */
@@ -359,6 +361,14 @@ static int select_inbox(void)
     }
 }
 
+/* Sink pro mimemsg: zapisuje rovnou do TLS spojeni. */
+static int append_sink(const char *buf, size_t len, void *ctx)
+{
+    (void)ctx;
+    tlsnet_write(buf, len);
+    return 0;
+}
+
 /* ----------------------------------------------------- main */
 
 int main(int argc, char **argv)
@@ -390,6 +400,23 @@ int main(int argc, char **argv)
     cmd = argv[i++];
     if (i < argc) arg = argv[i];
 
+    /* append ma vlastni pojmenovane argumenty - dnesni cmd/arg na to
+     * nestaci. */
+    const char *ap_from = NULL, *ap_to = NULL, *ap_subject = NULL;
+    const char *ap_body = "", *ap_attach = NULL;
+
+    if (!strcmp(cmd, "append")) {
+        int k;
+        for (k = i + 1; k < argc; k++) {
+            if (!strcmp(argv[k], "--from") && k + 1 < argc)         ap_from = argv[++k];
+            else if (!strcmp(argv[k], "--to") && k + 1 < argc)      ap_to = argv[++k];
+            else if (!strcmp(argv[k], "--subject") && k + 1 < argc) ap_subject = argv[++k];
+            else if (!strcmp(argv[k], "--body") && k + 1 < argc)    ap_body = argv[++k];
+            else if (!strcmp(argv[k], "--attach") && k + 1 < argc)  ap_attach = argv[++k];
+        }
+        if (!arg || !ap_from || !ap_to || !ap_subject) { usage(); return 3; }
+    }
+
     tlsnet_connect(host, port);
     tlsnet_handshake(host, cafile);
 
@@ -409,8 +436,13 @@ int main(int argc, char **argv)
     if (imap_wait_tag(tag) != 0)
         tlsnet_die(1, "prihlaseni odmitnuto");
 
-    if (select_inbox() != 0)
-        tlsnet_die(1, "SELECT INBOX selhal");
+    /* APPEND pracuje s cizi slozkou a zadny SELECT nepotrebuje. Kdyby
+     * se delal, selhani SELECTu na INBOXu by shodilo i ukladani, ktere
+     * s INBOXem nema nic spolecneho. */
+    if (strcmp(cmd, "append") != 0) {
+        if (select_inbox() != 0)
+            tlsnet_die(1, "SELECT INBOX selhal");
+    }
 
     rc = 0;
     if (!strcmp(cmd, "list") && arg && !strcmp(arg, "unseen")) {
@@ -438,6 +470,53 @@ int main(int argc, char **argv)
         next_tag(tag, sizeof(tag));
         imap_send(tag, "UID STORE %s +FLAGS (\\Seen)", arg);
         rc = (imap_wait_tag(tag) == 0) ? 0 : 1;
+    } else if (!strcmp(cmd, "append")) {
+        struct mimemsg m;
+        size_t msgsz = 0;
+        char qf[512];
+        char line[LINE_SZ];
+
+        memset(&m, 0, sizeof(m));
+        m.from = ap_from;
+        m.to = ap_to;
+        m.subject = ap_subject;
+        m.body = ap_body;
+        m.attach = ap_attach;
+        /* Datum nechavame na serveru - hodiny zarizeni nemaji zalohu a
+         * INTERNALDATE ze serveru je spolehlivejsi. */
+        m.date = NULL;
+        m.progname = argv[0];
+
+        imap_quote(arg, qf, sizeof(qf));
+
+        /* Slozku zaloz, kdyz neni. Chyba "uz existuje" je v poradku -
+         * IMAP na ni nema zvlastni kod, takze se navratovy kod ignoruje
+         * zamerne a pripadny skutecny problem se projevi az na APPEND. */
+        next_tag(tag, sizeof(tag));
+        imap_send(tag, "CREATE %s", qf);
+        (void)imap_wait_tag(tag);
+
+        if (mimemsg_size(&m, &msgsz) != 0)
+            tlsnet_die(1, "zpravu se nepodarilo spocitat");
+
+        /* Zadny seznam priznaku za nazvem slozky: zprava se ulozi bez
+         * \Seen, takze se ve slozce tvari jako nova. Hunter tu slozku
+         * nikdy neprochazi, takze to nic nerozbije. */
+        next_tag(tag, sizeof(tag));
+        imap_send(tag, "APPEND %s {%lu}", qf, (unsigned long)msgsz);
+
+        /* Synchronizujici literal: server musi odpovedet "+", teprve
+         * pak se posilaji data. Na LITERAL+ se nespolehame, server ho
+         * nemusi umet. */
+        if (imap_readline(line, sizeof(line)) < 0 || line[0] != '+')
+            tlsnet_die(1, "server neprijal APPEND literal");
+
+        if (mimemsg_emit(&m, append_sink, NULL) != 0)
+            tlsnet_die(1, "zpravu se nepodarilo odeslat");
+        tlsnet_write("\r\n", 2);
+
+        rc = imap_wait_tag(tag) == 0 ? 0 : 1;
+        if (rc != 0) fprintf(stderr, "mailrecv: APPEND odmitnut\n");
     } else if (!strcmp(cmd, "noop")) {
         rc = 0;
     } else {
