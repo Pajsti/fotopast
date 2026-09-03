@@ -57,5 +57,18 @@ assert_eq "vychozi REQUEST_MAX"  "$REQUEST_MAX" "5"
 assert_eq "vychozi strop neni pod vychozim REQUEST_MAX" \
           "$MAX_SEND_PER_WAKE" "5"
 
+# --- STATUS hlasi hloubku fronty (spec 2026-09-02, sekce 10) ---
+: > "$STATE_DIR/sent_list.txt"
+rm -f "$STATE_DIR/cursor.txt"
+fixture_snap 260828 111111
+fixture_snap 260828 222222
+CMD_REPLY=""
+execute_command "STATUS" 1
+assert_contains "STATUS hlasi frontu" "$CMD_REPLY" "FRONTA:"
+
+# a cislo odpovida skutecnemu poctu kandidatu
+q=$(find_ready_candidates | grep -c .)
+assert_contains "STATUS hlasi spravny pocet" "$CMD_REPLY" "FRONTA:$q"
+
 fixture_teardown
 finish
