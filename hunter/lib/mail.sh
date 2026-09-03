@@ -14,9 +14,13 @@
 # pro day_fully_sent neviditelne. Predpoklad plocheho stromu je od
 # spec 2026-09-02 zavazny, ne uz jen nahodny - viz tamtez.
 
-# find_ready_candidates
-# Vypise (radek na soubor) cesty ke snimkum, ktere jeste nejsou v
-# sent_list.txt a jsou kompletni.
+# list_unsent_snaps <jen_kompletni>
+# Spolecny chodec po dnech pro find_ready_candidates (bezna detekce
+# kandidatu) i CLEAR QUEUE (spec 2026-09-03, oprava omezeni 9.3 bod 3).
+# Vypise (radek na soubor) cesty ke snimkum ode dne cursoru dal, ktere
+# jeste nejsou v sent_list.txt.
+#   1 = jen soubory, ktere pousti snapready (bezna detekce kandidatu)
+#   0 = vsechny nedoslane, i nekompletni (CLEAR QUEUE - viz nize)
 #
 # Prochazi jen dny OD CURSORU dal (spec 2026-09-02, sekce 3) - starsi
 # dny jsou vyrizene a znovu se do nich nekouka. To je duvod, proc tohle
@@ -24,12 +28,15 @@
 #
 # Druha polovina zrychleni: JEDEN fgrep na den misto jednoho na soubor.
 # Puvodni verze spoustela novy proces pro kazdy soubor, coz pri tisicich
-# fotek delalo tisice forku na probuzeni.
+# fotek delalo tisice forku na probuzeni. Podminka na _ready_only je
+# obycejny `[ ]` test, zadny subshell - na hotem case (az 25x za
+# probuzeni, jednou na den) tim nesmi pribyt zadny dalsi fork.
 #
 # Vystup je chronologicky VZESTUPNY (glob nad YYMMDD i nad HHMMSS_...
 # radi lexikograficky, coz je tady zaroven chronologicky). MAX_QUEUE na
 # to spoleha, kdyz odrezava nejstarsi.
-find_ready_candidates() {
+list_unsent_snaps() {
+    _ready_only="$1"
     _cur=$(cursor_read)
     [ -n "$_cur" ] || return 0
     _nl='
@@ -49,12 +56,21 @@ find_ready_candidates() {
             case "$_nl$_slice$_nl" in
                 *"$_nl$_f$_nl"*) continue ;;
             esac
-            if "$HUNTER_DIR/bin/snapready" "$_f" >/dev/null 2>&1; then
-                printf '%s\n' "$_f"
+            if [ "$_ready_only" = 1 ]; then
+                "$HUNTER_DIR/bin/snapready" "$_f" >/dev/null 2>&1 || continue
             fi
+            printf '%s\n' "$_f"
         done
     done
 }
+
+# find_ready_candidates
+# Vypise (radek na soubor) cesty ke snimkum, ktere jeste nejsou v
+# sent_list.txt a jsou kompletni. Jen tenky wrapper nad
+# list_unsent_snaps 1 - signatura i chovani beze zmeny, takze vsichni
+# dnesni volajici (wait_for_candidates, build_status_reply) a vsechny
+# stavajici testy zustavaji netknute.
+find_ready_candidates() { list_unsent_snaps 1; }
 
 # day_fully_sent <YYMMDD>
 # 0, kdyz je KAZDY *.jpg toho dne v sent_list.txt.

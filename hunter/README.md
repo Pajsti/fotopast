@@ -88,7 +88,7 @@ HUNTER <token> GET <jmeno>             konkretni soubor
 HUNTER <token> QUALITY HD|LOW          kvalita odesilanych fotek
 HUNTER <token> CONFIRM ON|OFF          potvrzovaci odpovedi
 HUNTER <token> WIPE CONFIRM            smaze jiz odeslane fotky
-HUNTER <token> CLEAR QUEUE             preskoci cekajici fotky (nemaze)
+HUNTER <token> CLEAR QUEUE             vyprazdni frontu, i vadne (nemaze)
 HUNTER <token> LIST CMD                vypis prikazu (dle aktualniho rezimu)
 HUNTER <token> ADD <tel|mail>          pridat opravneneho    [vzdy token]
 HUNTER <token> REMOVE <tel|mail>       odebrat opravneneho   [vzdy token]
@@ -102,22 +102,31 @@ Pošli `HUNTER <token> LIST CMD` pro aktuální výpis (mění se podle
 `AUTH_TYPE`).
 
 **Fronta.** `STATUS` hlásí `FRONTA:<N>` — kolik fotek čeká na odeslání.
-Když je nedodělek zbytečně velký, `CLEAR QUEUE` ho vyprázdní: fotky
-zůstanou na kartě, jen se přestanou nabízet. Totéž dělá automaticky
-`MAX_QUEUE` v configu, když fronta přeroste strop (přeskočí nejstarší).
+Když je nedodělek zbytečně velký, `CLEAR QUEUE` ho vyprázdní **celý** —
+včetně souborů, které `snapready` trvale odmítá (typicky nedopsaný
+JPEG po výpadku napájení). Fotky zůstanou na kartě, jen se přestanou
+nabízet. `MAX_QUEUE` v configu dál přeskakuje automaticky jen
+**kompletní** soubory, když fronta přeroste strop (nejstarší napřed) —
+to se nemění.
 
 **Pozor:** přeskočené fotky se zapisují do `state/sent_list.txt`, takže
 je pozdější `WIPE CONFIRM` smaže, i když ti nikdy nedorazily mailem.
 
-**Trvale neúplný snímek je zvláštní případ, který `CLEAR QUEUE`
-NEŘEŠÍ.** Když `snapready` nějaký soubor natrvalo odmítá (poškozený,
-nikdy nedopsaný), nikdy se nestane kandidátem — `CLEAR QUEUE` ani
-`MAX_QUEUE` ho tedy nemají jak přeskočit a jeho den zůstává navždy
-otevřený. Prohledávané okno dnů pak roste o jeden den denně, dokud je
-soubor na kartě. Jediná cesta ven je fyzický přístup ke kartě (podrobně
-v [2026-09-02-hunter-queue-cursor-design.md](../docs/superpowers/specs/2026-09-02-hunter-queue-cursor-design.md),
-sekce 9, bod 3). V `log.txt` se to pozná podle opakujícího se hlášení
-`cursor zasekly na ...`.
+**Trvale neúplný snímek — `CLEAR QUEUE` ho teď uzavře.** Když
+`snapready` nějaký soubor natrvalo odmítá (poškozený, nikdy nedopsaný),
+nikdy se nestane kandidátem `find_ready_candidates`, takže jeho den by
+bez zásahu zůstával navždy otevřený a prohledávané okno dnů by rostlo o
+jeden den denně, dokud je soubor na kartě. `CLEAR QUEUE` (od
+2026-09-03) přesto takový soubor označí za vyřízený, den uzavře a
+cursor přes něj posune — fyzický přístup ke kartě už není jediná cesta
+ven, jen ta poslední (podrobně v
+[2026-09-02-hunter-queue-cursor-design.md](../docs/superpowers/specs/2026-09-02-hunter-queue-cursor-design.md),
+sekce 9, bod 3). **Přijaté riziko:** fotka, kterou aplikace zrovna
+dopisuje, může `snapready` odmítat ze stejného důvodu jako trvale
+vadný soubor — `CLEAR QUEUE` ji pak označí za vyřízenou, aniž kdy
+dorazí; vědomé rozhodnutí majitele projektu, protože zaseklý den
+navždy je horší. V `log.txt` se zaseklý den pozná podle opakujícího se
+hlášení `cursor zasekly na ...`.
 
 **Autorizace:** výchozí `AUTH_TYPE=TOKEN` vyžaduje platný token i
 odesílatele v `MAIL_MASTERS`. `AUTH_TYPE=SENDER` stačí jen odesílatel

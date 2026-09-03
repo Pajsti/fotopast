@@ -172,15 +172,23 @@ smazání sám přepisuje bez zaniklých záznamů, takže se dlouhodobě čist�
 HUNTER <token> CLEAR QUEUE
 ```
 
-Označí **všechny aktuálně čekající** fotky za vyřízené, aniž by je
-odeslal. Soubory na kartě zůstávají. Pak se provede posun cursoru
-(3.2), takže se dohánění nedodělku zastaví.
+Označí **celou aktuální frontu** za vyřízenou, aniž by ji odeslal —
+**včetně souborů, které `snapready` trvale odmítá** (typicky nedopsaný
+JPEG po výpadku napájení uprostřed zápisu). Soubory na kartě zůstávají.
+Pak se provede posun cursoru (3.2), takže se dohánění nedodělku
+zastaví — i pro den, který by jinak zůstal navždy otevřený (rozhodnutí
+majitele projektu, 2026-09-03; podrobně viz sekce 9, bod 3).
 
 - **Token není povinný** — příkaz nemění oprávnění, stejně jako `WIPE`.
   Zůstává tedy dostupný i v režimu `SENDER` (viz spec příkazů, 3.3).
 - **Bez potvrzovacího slova.** `WIPE` vyžaduje `CONFIRM`, protože maže;
   `CLEAR QUEUE` soubory nechává.
 - Odpověď: `QUEUE CLEARED`, **bez počtu**.
+- **Přijaté riziko:** fotka, kterou aplikace zrovna dopisuje, `snapready`
+  odmítá právě proto, že je rozepsaná — kód nerozliší "rozepsaná" od
+  "trvale vadná". `CLEAR QUEUE` ji tedy může označit za vyřízenou, aniž
+  kdy dorazí. Vědomé rozhodnutí majitele projektu (2026-09-03): příkaz
+  se posílá vědomě a dnešní stav (den zaseklý navždy) je horší.
 
 Proč bez počtu: příkaz sám jen nastaví příznak, skutečné přeskočení
 provede `hunter.sh` **až po zpracování všech příkazů**. Musí to tak být
@@ -317,47 +325,54 @@ přijatelné. Obojí zůstává.
 2. **Skok hodin zpět.** Kdyby se po synchronizaci času zapsal snímek do
    složky dne, která je už za cursorem, automatická větev ho nevyzvedne.
    Zůstává dosažitelný přes `DATE`/`GET`.
-3. **Den, který nikdy nedoteče.** Trvale neúplný soubor (`snapready` ho
-   nikdy nepustí) drží cursor na svém dni napořád. Ověřeno na 20 složkách
-   dnů s jedním takovým souborem v nejstarší z nich: přes 12 po sobě
-   jdoucích probuzení se `state/cursor.txt` **vůbec nezapíše** a každé
-   probuzení projde všech 20 složek.
+3. **Den, který nikdy nedoteče — opraveno, viz `CLEAR QUEUE` (2026-09-03).**
+   Trvale neúplný soubor (`snapready` ho nikdy nepustí) držel cursor na
+   svém dni napořád. Ověřeno na 20 složkách dnů s jedním takovým
+   souborem v nejstarší z nich: přes 12 po sobě jdoucích probuzení se
+   `state/cursor.txt` **vůbec nezapsal** a každé probuzení procházelo
+   všech 20 složek.
 
-   Dopad **není** omezený na "jednu složku navíc za probuzení", jak dřív
-   tvrdil tenhle bod — nic ho neomezuje. Je to celé okno od zaseklého dne
-   po dnešek a roste o jednu další složku s každým dalším dnem, co
-   přibude na kartě, dokud je zaseklý soubor přítomný. Každá složka v
-   okně stojí jeden `fgrep` přes celý `sent_list.txt` (3.1) a
-   `wait_for_candidates` (`lib/mail.sh`) tohle opakuje až
+   Dopad **nebyl** omezený na "jednu složku navíc za probuzení", jak
+   dřív tvrdil tenhle bod — nic ho neomezovalo. Bylo to celé okno od
+   zaseklého dne po dnešek, rostoucí o jednu další složku s každým
+   dalším dnem, co přibude na kartě, dokud je zaseklý soubor přítomný.
+   Každá složka v okně stojí jeden `fgrep` přes celý `sent_list.txt`
+   (3.1) a `wait_for_candidates` (`lib/mail.sh`) tohle opakuje až
    `SNAP_WAIT`-krát za probuzení, dokud nedorazí nový snímek nebo
    nevyprší čas.
 
-   **`CLEAR QUEUE` tohle NEŘEŠÍ** — nejde o mezeru v implementaci, ale o
-   strukturální nemožnost. `CLEAR QUEUE` (přes `skip_snaps`, sekce 5)
-   umí přeskočit jen to, co `find_ready_candidates` vrátí jako
-   kandidáta, a soubor odmítnutý `snapready` kandidátem z definice
-   nikdy není (3.1) — `CLEAR QUEUE` ho tedy nikdy nezapíše do
-   `sent_list.txt` a `day_fully_sent` pro jeho den bude vracet "otevřeno"
-   napořád. `MAX_QUEUE` je ze stejného důvodu bezmocný — soubor se do
-   fronty vůbec nedostane, není co odříznout. `WIPE CONFIRM` maže jen
-   to, co je v `sent_list.txt` — zaseklý soubor tam není. `DATE`/`GET`
-   soubor sice dokážou poslat, ale vyžádané soubory se do
-   `sent_list.txt` schválně nezapisují (invariant 7.1), takže den
-   zůstane otevřený i po nich.
+   **Vzdálené východisko teď existuje: `CLEAR QUEUE` zaseklý den
+   zavírá.** Rozhodnutí majitele projektu (2026-09-03): `CLEAR QUEUE`
+   smaže — v tom smyslu, že označí za vyřízené — celou aktuální frontu,
+   včetně souborů, které `snapready` trvale odmítá. Chodec `mail.sh`
+   (`find_ready_candidates`) je proto rozdělený na společný chodec po
+   dnech `list_unsent_snaps <jen_kompletni>` a tenký filtr:
+   `list_unsent_snaps 1` je dnešní `find_ready_candidates` (jen
+   kandidáti, které `snapready` pustí), `list_unsent_snaps 0` vrací
+   úplně všechno nedoslané od cursoru dál, včetně toho, co `snapready`
+   odmítá. `CLEAR QUEUE` teď volá tu druhou variantu, takže i zaseklý
+   soubor skončí v `sent_list.txt`, jeho den se uzavře (`day_fully_sent`)
+   a `cursor_advance` se přes něj konečně posune. `MAX_QUEUE` se
+   nemění — dál řeže jen `$snap_list` (jen kompletní soubory), protože
+   automatické oříznutí nedodělku má zůstat konzervativní; jde jen o
+   ruční `CLEAR QUEUE`. `WIPE CONFIRM` a `DATE`/`GET` se nemění vůbec.
 
-   **Jediné skutečné východisko je fyzický přístup ke kartě** — zaseklý
-   soubor smazat nebo přesunout mimo `snaps/`, případně `cursor.txt`
-   ručně opravit. Vzdálená (e-mailová) cesta ven neexistuje. Operátor se
-   o zaseklém dni aspoň dozví z logu: `cursor_advance` (`lib/mail.sh`)
-   hlásí nejvýš jednou za běh, když je nejstarší otevřený den totožný s
-   dnem, na kterém cursor už stojí, a existuje den novější — spolu s
-   počtem složek, které se teď prohledávají, aby bylo vidět, jak okno
-   roste.
+   **Přijaté riziko:** fotka, kterou aplikace zrovna dopisuje, je
+   `snapready` odmítána ze stejného důvodu jako trvale vadný soubor —
+   kód nerozliší "rozepsaná" od "trvale vadná". `CLEAR QUEUE` ji tedy
+   může označit za vyřízenou, aniž kdy dorazí. Vědomé rozhodnutí
+   majitele projektu: `CLEAR QUEUE` se posílá vědomě a dnešní stav (den
+   zaseklý navždy, jediná cesta ven je fyzický přístup ke kartě) je
+   horší. Nejnovější den se záměrně nevyjímá — vyjmutí by jen vrátilo
+   díru, kdyby zaseklý soubor ležel právě tam.
 
-   Zda má `CLEAR QUEUE` takový den rovnou zavírat (tedy počítat
-   "nemůžu poslat" za "vyřízeno"), je otevřená otázka pro majitele
-   projektu — spec 5 to dnes neřeší a tenhle dokument to úmyslně
-   nerozhoduje.
+   Fyzický přístup ke kartě (smazat/přesunout zaseklý soubor, případně
+   ručně opravit `cursor.txt`) zůstává možný, ale **už není jediná
+   cesta**. Operátor se o zaseklém dni dál dozví z logu:
+   `cursor_advance` (`lib/mail.sh`) hlásí nejvýš jednou za běh, když je
+   nejstarší otevřený den totožný s dnem, na kterém cursor už stojí, a
+   existuje den novější — spolu s počtem složek, které se teď
+   prohledávají.
 4. **YY přetečení století** v porovnání dnů — zděděné omezení, už
    popsané v [command.sh:254-256](../../../hunter/lib/command.sh#L254-L256).
 

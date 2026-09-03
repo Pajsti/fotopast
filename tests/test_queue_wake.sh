@@ -210,4 +210,41 @@ assert_contains "H: nevyzadane preskocene v sent_list jsou (2)" "$sl" "020000"
 
 subproc_fixture_teardown
 
+# =====================================================================
+# I: REGRESE - trvale nekompletni soubor (snapready ho odmita navzdy)
+# lezi v nejstarsim dni, existuje novejsi den. CLEAR QUEUE musi
+# vyprazdnit CELOU frontu vcetne nej, jinak den nikdy nedoteka a cursor
+# se navzdy zasekne (spec 2026-09-03, oprava omezeni 9.3 bod 3).
+# =====================================================================
+subproc_fixture_setup 3 3
+
+subproc_mk_snap 260828 010000   # trvale nekompletni - snapready ho vzdy odmita
+subproc_mk_snap 260829 020000   # novejsi den, normalni kandidat
+
+printf '#!/bin/sh\ncase "$1" in *010000*) exit 1 ;; esac\nexit 0\n' \
+    > "$HDIR/bin/snapready"
+chmod +x "$HDIR/bin/snapready"
+
+printf 'UIDVALIDITY|1\nMSG|10|paja.stindl@seznam.cz|HUNTER tajnytoken1 CLEAR QUEUE\n' \
+    > "$FIX/mail_listing.txt"
+
+subproc_run_hunter
+
+sl=$(cat "$HDIR/state/sent_list.txt" 2>/dev/null)
+ms=$(cat "$FIX/mailsend.log" 2>/dev/null)
+cur=$(cat "$HDIR/state/cursor.txt" 2>/dev/null)
+
+assert_eq "I: neodesla se ani jedna fotka" \
+          "$(printf '%s\n' "$ms" | grep -c -- '--attach')" "0"
+assert_contains "I: log rekl kolik preskocil" \
+                "$(cat "$HDIR/log.txt")" "CLEAR QUEUE: preskoceno 2"
+assert_contains "I: i trvale odmitany soubor se dostal do sent_list" "$sl" "010000"
+assert_contains "I: normalni kandidat je take v sent_list" "$sl" "020000"
+assert_eq "I: den se souborem odmitanym snapready se uzavrel, cursor se posunul" \
+          "$cur" "260829"
+assert_eq "I: odmitany soubor zustal na karte" \
+          "$([ -f "$SDCARD/snaps/260828/010000_000_65535_P.jpg" ] && echo ano)" "ano"
+
+subproc_fixture_teardown
+
 finish

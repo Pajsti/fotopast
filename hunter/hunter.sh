@@ -118,12 +118,18 @@ process_mail
 
 snap_list=$(wait_for_candidates)
 
-# CLEAR QUEUE: uzivatel rekl, ze cekajici fotky uz posilat nechce.
-# Soubory zustavaji na karte, jen se oznaci za vyrizene. Bezi to az
-# tady, po zpracovani vsech prikazu, aby byl REQUESTED_SNAPS konecny -
-# skip_snaps vyzadane vynechava (spec 2026-09-02, 5 a 7.1).
-if [ "$CLEAR_QUEUE_REQUESTED" = 1 ] && [ -n "$snap_list" ]; then
-    cleared=$(skip_snaps "$snap_list")
+# CLEAR QUEUE: uzivatel rekl, ze celou frontu uz posilat nechce - VCETNE
+# souboru, ktere snapready trvale odmita (napr. rozepsanych pri vypadku
+# napajeni). Proto cerstvy sken list_unsent_snaps 0 misto $snap_list:
+# ten druhy je jen kandidati, kteri projdou snapready, a takovy soubor
+# by jinak drzel svuj den navzdy otevreny a cursor navzdy zaseknuty
+# (spec 2026-09-03, oprava omezeni 9.3 bod 3). Soubory zustavaji na
+# karte, jen se oznaci za vyrizene. Bezi to az tady, po zpracovani vsech
+# prikazu, aby byl REQUESTED_SNAPS konecny - skip_snaps vyzadane
+# vynechava (spec 2026-09-02, 5 a 7.1). Bezi jen kdyz prikaz dorazil,
+# takze to na beznem probuzeni nic nestoji.
+if [ "$CLEAR_QUEUE_REQUESTED" = 1 ]; then
+    cleared=$(skip_snaps "$(list_unsent_snaps 0)")
     log "CLEAR QUEUE: preskoceno $cleared cekajicich fotek"
     snap_list=""
 fi

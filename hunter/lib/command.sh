@@ -202,7 +202,7 @@ build_cmd_listing() {
     printf '%s QUALITY HD|LOW          kvalita odesilanych fotek\n' "$p"
     printf '%s CONFIRM ON|OFF          potvrzovaci odpovedi\n' "$p"
     printf '%s WIPE CONFIRM            smaze jiz odeslane fotky\n' "$p"
-    printf '%s CLEAR QUEUE             preskoci cekajici fotky (nemaze)\n' "$p"
+    printf '%s CLEAR QUEUE             vyprazdni frontu, i vadne (nemaze)\n' "$p"
     printf '%s LIST CMD                tento vypis\n' "$p"
     printf '%s ADD <tel|mail>          pridat opravneneho   [vzdy token]\n' "$pp"
     printf '%s REMOVE <tel|mail>       odebrat opravneneho  [vzdy token]\n' "$pp"
