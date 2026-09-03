@@ -44,7 +44,7 @@ static char inbuf[INBUF_SZ];
 static size_t inlen = 0, inpos = 0;
 static int tagseq = 0;
 
-/* ----------------------------------------------------- ctecí vrstva */
+/* ----------------------------------------------------- cteci vrstva */
 
 static int raw_fill(void)
 {
@@ -363,11 +363,33 @@ static int select_inbox(void)
     }
 }
 
-/* Sink pro mimemsg: zapisuje rovnou do TLS spojeni. */
+/* Sink pro mimemsg: zapisuje rovnou do TLS spojeni. Ohliduje pocet uz
+ * poslanych bajtu proti ohlasenemu literalu - viz append_ctx nize. */
+struct append_ctx {
+    size_t written;   /* kolik bajtu uz doslo do sinku */
+    size_t limit;     /* velikost literalu ohlasena v APPEND {n} */
+    int overflow;     /* 1 kdyz mimemsg_emit chtel poslat vic nez limit */
+};
+
 static int append_sink(const char *buf, size_t len, void *ctx)
 {
-    (void)ctx;
+    struct append_ctx *a = ctx;
+    size_t room = a->limit - a->written;
+
+    /* Nikdy neposlat vic, nez kolik jsme serveru ohlasili v {n}. Kdyby
+     * se priloha mezi mimemsg_size a mimemsg_emit zvetsila, prebytek se
+     * zahodi - jinak by po literalu doslo vic bajtu, nez server cekal,
+     * a rozjelo by se cele spojeni (server by zbytek precetl jako
+     * dalsi IMAP prikaz). overflow se nastavi, aby volajici poznal, ze
+     * se opravdu neco zahodilo - i kdyz "written == limit" vypada
+     * navenek stejne jako normalni uspesny konec. */
+    if (len > room) {
+        a->overflow = 1;
+        len = room;
+    }
+    if (len == 0) return 0;
     tlsnet_write(buf, len);
+    a->written += len;
     return 0;
 }
 
@@ -415,6 +437,7 @@ int main(int argc, char **argv)
             else if (!strcmp(argv[k], "--subject") && k + 1 < argc) ap_subject = argv[++k];
             else if (!strcmp(argv[k], "--body") && k + 1 < argc)    ap_body = argv[++k];
             else if (!strcmp(argv[k], "--attach") && k + 1 < argc)  ap_attach = argv[++k];
+            else { usage(); return 3; }
         }
         if (!arg || !ap_from || !ap_to || !ap_subject) { usage(); return 3; }
     }
@@ -474,6 +497,7 @@ int main(int argc, char **argv)
         rc = (imap_wait_tag(tag) == 0) ? 0 : 1;
     } else if (!strcmp(cmd, "append")) {
         struct mimemsg m;
+        struct append_ctx actx;
         size_t msgsz = 0;
         char qf[512];
         char line[LINE_SZ];
@@ -487,7 +511,7 @@ int main(int argc, char **argv)
         /* Datum nechavame na serveru - hodiny zarizeni nemaji zalohu a
          * INTERNALDATE ze serveru je spolehlivejsi. */
         m.date = NULL;
-        m.progname = argv[0];
+        m.progname = "mailrecv";
 
         imap_quote(arg, qf, sizeof(qf));
 
@@ -509,15 +533,55 @@ int main(int argc, char **argv)
 
         /* Synchronizujici literal: server musi odpovedet "+", teprve
          * pak se posilaji data. Na LITERAL+ se nespolehame, server ho
-         * nemusi umet. */
-        if (imap_readline(line, sizeof(line)) < 0 || line[0] != '+')
-            tlsnet_die(1, "server neprijal APPEND literal");
+         * nemusi umet. Pred continuation smi server poslat libovolny
+         * pocet untagged odpovedi (RFC 3501 sekce 7 - napr. "* OK
+         * [ALERT] ..." nebo aktualizace EXISTS/EXPUNGE) - ty presko-
+         * cime. Tagovana odpoved znamena, ze APPEND odmitl uz tady. */
+        for (;;) {
+            if (imap_readline(line, sizeof(line)) < 0)
+                tlsnet_die(1, "server neodpovedel na APPEND");
+            if (line[0] == '+') break;
+            if (line[0] != '*') tlsnet_die(1, "server odmitl APPEND");
+        }
 
-        if (mimemsg_emit(&m, append_sink, NULL) != 0)
+        /* append_sink nikdy neposle vic nez msgsz bajtu (viz append_ctx) -
+         * spojeni tak zustane v synchronu, i kdyby se priloha mezi
+         * mimemsg_size a mimemsg_emit zmenila. Kdyz je kratsi, dopl-
+         * nime mezerami presne na ohlasenou delku a vysledek stejne
+         * ohlasime jako chybu - jinak by se do sent_list.txt zapsala
+         * uspesne "odeslana" zprava s uriznutou fotkou. */
+        actx.written = 0;
+        actx.limit = msgsz;
+        actx.overflow = 0;
+        if (mimemsg_emit(&m, append_sink, &actx) != 0)
             tlsnet_die(1, "zpravu se nepodarilo odeslat");
+
+        /* actx.written == msgsz je normalni uspesny konec, ale je to
+         * TAKY stav po overflow oriznuti (append_sink nikdy neprekroci
+         * limit) - proto se overflow hlida samostatnym priznakem, ne
+         * odvozuje z poctu poslanych bajtu. */
+        rc = 0;
+        if (actx.overflow) {
+            fprintf(stderr, "mailrecv: priloha behem odesilani narostla, "
+                            "APPEND se zahodi\n");
+            rc = 1;
+        } else if (actx.written < msgsz) {
+            char pad[64];
+            size_t left = msgsz - actx.written;
+
+            fprintf(stderr, "mailrecv: priloha zmenila velikost behem "
+                            "odesilani, APPEND se zahodi\n");
+            memset(pad, ' ', sizeof(pad));
+            while (left > 0) {
+                size_t n = left < sizeof(pad) ? left : sizeof(pad);
+                tlsnet_write(pad, n);
+                left -= n;
+            }
+            rc = 1;
+        }
         tlsnet_write("\r\n", 2);
 
-        rc = imap_wait_tag(tag) == 0 ? 0 : 1;
+        if (imap_wait_tag(tag) != 0) rc = 1;
         if (rc != 0) fprintf(stderr, "mailrecv: APPEND odmitnut\n");
     } else if (!strcmp(cmd, "noop")) {
         rc = 0;
