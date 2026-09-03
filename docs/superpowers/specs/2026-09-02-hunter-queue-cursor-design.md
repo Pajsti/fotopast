@@ -91,6 +91,22 @@ negarantuje a říká to i v komentáři. `MAX_QUEUE` (sekce 6) na tuhle
 vlastnost spoléhá, když odřezává "nejstarší" — musí být tedy krytá
 testem, ne jen předpokládaná.
 
+Druhý důsledek téhož přechodu na glob: strom `snaps/` musí být odteď
+přesně **dvě úrovně** — `snaps/<YYMMDD>/*.jpg`, den je složka s názvem
+přesně 6 číslic (`snap_num6`), soubory přímo v ní. Dřívější
+`find "$SDCARD/snaps" -type f -name '*.jpg'` tenhle předpoklad vstřebával
+implicitně (rekurze do libovolné hloubky); nový glob ho **vynucuje** —
+cokoli hlouběji nebo ve složce s jiným názvem je pro
+`find_ready_candidates` i `day_fully_sent` neviditelné, tedy nemůže ani
+kandidovat, ani udržet svůj den otevřený. Praktické riziko je dnes nízké
+(`send_snap`/`resolve_attach_path` ve stejném souboru už plochý tvar
+předpokládají), ale jde nově o **tvrdý požadavek**, ne o náhodou
+fungující vlastnost, kterou dřív absorboval `find`. Nekonzistentně:
+`request_date`/`request_get`
+([command.sh:335-352](../../../hunter/lib/command.sh#L335-L352)) pořád
+používají rekurzivní `find` (viz 8.3, beze změny) — `DATE`/`GET` tedy
+dosáhnou i na soubor, který automatická větev nikdy neuvidí.
+
 Klíčová změna není jen zúžení množiny dnů, ale i **jeden `fgrep` na
 den místo jednoho na soubor**. Porovnání proti načtenému slice se dělá
 shellovým `case` (bez forku), na plnou shodu řádku:
