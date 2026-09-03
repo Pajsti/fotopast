@@ -126,7 +126,7 @@ cursor_advance() {
 # Sjednocuje "dozenani nedodelku" a "cekani na novy snimek z tohoto
 # probuzeni" do jedine smycky: pri kazdem kole hleda kandidaty, a jakmile
 # nejaky najde (treba uz existujici nedodelek), okamzite konci - zbytecne
-# necekat, kdyz uz je co poslat. Kdyz nic neni, poolí do SNAP_WAIT (nebo
+# necekat, kdyz uz je co poslat. Kdyz nic neni, pooli do SNAP_WAIT (nebo
 # do celkoveho RUN_DEADLINE, podle toho, co nastane driv), pak vraci
 # prazdno a hlavni beh pokracuje bez odesilani.
 #

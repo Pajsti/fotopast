@@ -28,7 +28,7 @@
 # Duvod: POSIX tridy znaku v tr (FEATURE_TR_CLASSES) jsou v busyboxu
 # volitelny compile-time prepinac a tenhle firmware ma busybox hodne
 # oklestenej (zadny awk/sed/cut/sort/...) - nechci na tom stavet, kdyz se
-# to da vyresit cistě shellovym `case`, ktery zadnou externí zavislost
+# to da vyresit ciste shellovym `case`, ktery zadnou externi zavislost
 # nema.
 #
 # --- tokeny ---------------------------------------------------------
@@ -218,7 +218,7 @@ build_cmd_listing() {
 #
 # Vyzadane fotky OBCHAZEJI sent_list.txt - preposlat uz odeslanou fotku
 # je cely smysl veci. Sbiraji se do REQUESTED_SNAPS (cesty oddelene
-# novym radkem), ktere hunter.sh sloucí s automatickymi kandidaty.
+# novym radkem), ktere hunter.sh slouci s automatickymi kandidaty.
 #
 # Strop je REQUEST_MAX, oddeleny od MAX_SEND_PER_WAKE - o vyzadane fotky
 # si uzivatel rekl vyslovne.
@@ -580,7 +580,7 @@ execute_command() {
 # Mazani je omezene VYHRADNE na $SDCARD/snaps/*.jpg soubory, ktere uz
 # jsou v sent_list.txt (spec sekce 7.3). Nikdy se nedotkne ubia_record.db,
 # logfile.txt, video/, HDPIC/ ani cehokoli mimo snaps/ - i kdyby se
-# sent_list.txt nekdy poskodil, `case` filtr níže je posledni pojistka.
+# sent_list.txt nekdy poskodil, `case` filtr nize je posledni pojistka.
 #
 # Po smazani se sent_list.txt prepise bez zaznamu o smazanych souborech
 # (atomicky), aby neblokovaly detekci pripadnych novych snimku se stejnym

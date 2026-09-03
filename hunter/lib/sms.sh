@@ -1,7 +1,7 @@
 # sms.sh - prijem, autorizace, vykonani SMS prikazu (viz spec sekce 7).
 #
 # Poradi kroku pro kazdou zpravu je zamerne: dedup-zapis PRED vykonanim,
-# smazani z ulozistě modulu AZ PO vykonani a pripadne odpovedi. Kdyby
+# smazani z uloziste modulu AZ PO vykonani a pripadne odpovedi. Kdyby
 # zarizeni zhaslo mezi vykonanim a smazanim, dalsi probuzeni uvidi
 # stejnou zpravu znovu - ale sms_seen.txt uz ji ma zapsanou, takze se jen
 # tise smaze bez druheho vykonani. U WIPE by dvojite vykonani nevadilo,
@@ -14,7 +14,7 @@
 
 # process_sms
 # Nacte nove SMS z modulu, autorizuje podle MASTERS, vykona, pripadne
-# odpovi (jen kdyz CONFIRM=ON), uklidi ulozistě modulu.
+# odpovi (jen kdyz CONFIRM=ON), uklidi uloziste modulu.
 process_sms() {
     listing=$("$HUNTER_DIR/bin/smsrecv" "$AT_PORT" "$AT_BAUD" list unread 2>>"$LOG_FILE")
     [ -z "$listing" ] && return 0

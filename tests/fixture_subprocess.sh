@@ -1,4 +1,4 @@
-# tests/fixture_subprocess.sh - staví izolovanou kopii CELEHO adresare
+# tests/fixture_subprocess.sh - stavi izolovanou kopii CELEHO adresare
 # hunter/ (hunter.sh + lib/) a spousti ji jako SKUTECNY podproces
 # (dash hunter.sh), na rozdil od tests/fixture.sh, ktere jen zdrojuje
 # lib/*.sh primo do bezicho testovaciho shellu.
@@ -13,7 +13,7 @@
 #
 # hunter.sh natvrdo nastavuje SDCARD=/tmp/mnt/sdcard (skutecny mountpoint
 # na zarizeni) - v IZOLOVANE KOPII skriptu (nikdy v repozitari!) se tenhle
-# radek prepise na docasny testovaci sdcard pres sed, cistě pro ucely
+# radek prepise na docasny testovaci sdcard pres sed, ciste pro ucely
 # testu na vyvojovem/CI stroji (sed neni soucasti toho, co bezi na
 # zarizeni - tam se pouziva jen puvodni, nezmeneny hunter.sh).
 #

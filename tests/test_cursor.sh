@@ -126,7 +126,7 @@ chmod +x "$HUNTER_DIR/bin/snapready"
 
 # --- stara fotka pod cursorem se neuznava (spec omezeni 3) ---
 # Kdyz se hodiny vratily zpatky, v starsi slozce se muze objevit nova
-# fotka. find_ready_candidates ji nikdy neuvidí (omezeni 2: ta je prijata
+# fotka. find_ready_candidates ji nikdy neuvidi (omezeni 2: ta je prijata
 # pres DATE/GET). Ale search pro nejstarsi otevreny den ji muze najit a
 # dostat se do deadlocku - cursor by se mel pohybovat i kdyz je ta fotka
 # tam, pokud jsou novejsi dny uzavrene.
