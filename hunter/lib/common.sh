@@ -255,6 +255,45 @@ skip_snaps() {
     printf '%s' "$_cnt"
 }
 
+# validate_transport
+# Uklidi SEND_TRANSPORT a IMAP_SAVE_FOLDER na hodnoty, se kterymi se da
+# pracovat. Je to samostatna funkce, aby sla testovat bez cteni configu.
+#
+# Vsechny opravy padaji na "smtp", protoze to je dosavadni chovani -
+# spatna konfigurace tedy nikdy nezhorsi to, co uz bezi.
+validate_transport() {
+    case "$SEND_TRANSPORT" in
+        smtp|imap|smtp-imap|imap-smtp|smtp+imap) ;;
+        *)
+            log "SEND_TRANSPORT neznama hodnota, pouzivam smtp"
+            SEND_TRANSPORT=smtp
+            ;;
+    esac
+
+    # Rezim s IMAPem bez IMAP_HOST by tise selhal pri kazdem odeslani -
+    # mailrecv by nemel kam se pripojit. Radsi zpatky na smtp.
+    case "$SEND_TRANSPORT" in
+        *imap*)
+            if [ -z "$IMAP_HOST" ]; then
+                log "SEND_TRANSPORT chce IMAP, ale IMAP_HOST je prazdny - pouzivam smtp"
+                SEND_TRANSPORT=smtp
+            fi
+            ;;
+    esac
+
+    [ -n "$IMAP_SAVE_FOLDER" ] || IMAP_SAVE_FOLDER=Fotopast
+
+    # INBOX je zakazany: prikazy se hledaji pres SEARCH UNSEEN prave
+    # tam, takze by si Hunter vlastni ulozene fotky precetl jako
+    # prichozi prikazy. Porovnava se bez ohledu na velikost pismen,
+    # protoze IMAP nazev INBOX case-insensitive je.
+    _isf_low=$(printf '%s' "$IMAP_SAVE_FOLDER" | tr 'A-Z' 'a-z')
+    if [ "$_isf_low" = "inbox" ]; then
+        log "IMAP_SAVE_FOLDER nesmi byt INBOX - pouzivam Fotopast"
+        IMAP_SAVE_FOLDER=Fotopast
+    fi
+}
+
 # load_config
 # config.txt je platny POSIX shell (KLIC=HODNOTA, komentare #), takze se
 # naimportuje primo pres `.` - zadny vlastni parser netreba. Vyplni
@@ -292,6 +331,16 @@ load_config() {
     case "$MAX_QUEUE" in
         ''|*[!0-9]*|0?*) MAX_QUEUE=100 ;;
     esac
+    # Kudy odchazi fotky a odpovedi na prikazy. Prijem prikazu tim
+    # dotcen NENI - ten jde pres IMAP vzdycky.
+    #   smtp       jen mailem (vychozi, dosavadni chovani)
+    #   imap       jen ulozit pres IMAP APPEND do slozky
+    #   smtp-imap  mailem; kdyz SMTP selze, ulozit do slozky
+    #   imap-smtp  do slozky; kdyz IMAP selze, poslat mailem
+    #   smtp+imap  oboji vzdy, dve kopie
+    : "${SEND_TRANSPORT:=smtp}"
+    : "${IMAP_SAVE_FOLDER:=Fotopast}"
+    validate_transport
     : "${IMAP_PORT:=993}"
     : "${TOKEN_FILE:=$HUNTER_DIR/mail.token}"
     # CA svazek pro overeni certifikatu SMTP/IMAP serveru. PRAZDNY je

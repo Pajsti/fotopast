@@ -56,6 +56,29 @@ IMAP_PORT=993
 # skonci s kodem 3 a prikazovy kanal tise prestane fungovat):
 #   hunter/bin/mailrecv 2>&1 | grep -q -- --ca && echo OK || echo STARY
 
+# --- Kudy odchazi fotky a odpovedi ---
+# Prijem prikazu tim dotcen NENI - ten jde pres IMAP vzdycky.
+#
+#   smtp       jen mailem (vychozi, dosavadni chovani)
+#   imap       jen ulozit pres IMAP APPEND do slozky nize
+#   smtp-imap  mailem; kdyz SMTP selze, ulozit do slozky
+#   imap-smtp  do slozky; kdyz IMAP selze, poslat mailem
+#   smtp+imap  oboji vzdy, dve kopie
+#
+# Proc to existuje: odesilani SMTP primo z mobilni SIM vypada pro
+# operatora jako spam bot a O2 kvuli tomu jednou zablokovalo celou SIM
+# (data i volani). IMAP APPEND je totez spojeni na 993, jake zarizeni
+# stejne dela kvuli prikazum - operator nema co chytit.
+SEND_TRANSPORT=smtp
+
+# Slozka na tomtez uctu, kam se uklada pres IMAP APPEND. Zaklada se
+# sama, kdyz neexistuje.
+#
+# NESMI byt INBOX: prikazy se hledaji pres SEARCH UNSEEN prave tam,
+# takze by si Hunter vlastni ulozene fotky precetl jako prichozi
+# prikazy. Kdyz sem INBOX napises, kod ho odmitne a pouzije Fotopast.
+IMAP_SAVE_FOLDER=Fotopast
+
 # Autorizovane e-mailove adresy pro prikazy, oddelene carkami.
 # Piste malymi pismeny.
 MAIL_MASTERS=paja.stindl@seznam.cz
