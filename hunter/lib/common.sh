@@ -51,9 +51,20 @@ rotate_log_if_needed() {
 # vracime "zije". Radsi pockat jedno probuzeni nez pustit dve instance
 # najednou nad sent_list.txt.
 lock_owner_alive() {
+    # "0" musi ven zvlast: projde testem na cislice, ale "kill -0 0"
+    # miri na vlastni skupinu procesu a VZDY uspeje, pricemz /proc/0
+    # neexistuje - spadlo by to do vetve "neumim rozhodnout" nize a
+    # zamek by drzel navzdy. Zadny proces cislo 0 nema.
     case "$1" in
-        ''|*[!0-9]*) return 1 ;;
+        ''|0|*[!0-9]*) return 1 ;;
     esac
+
+    # Zamek nesouci nas vlastni pid je vzdycky zbytek po mrtvem
+    # predchudci: dva procesy tentyz pid zaroven drzet nemuzou. Bez
+    # tehle pojistky by na zarizeni kill -0 i cmdline odpovedely
+    # "zije hunter.sh" - protoze by se ptaly na nas.
+    [ "$1" = "$$" ] && return 1
+
     kill -0 "$1" 2>/dev/null || return 1
     [ -r "/proc/$1/cmdline" ] || return 0
     grep -q hunter.sh "/proc/$1/cmdline" 2>/dev/null
@@ -79,10 +90,11 @@ acquire_lock() {
     oldpid=$(cat "$lockdir/pid" 2>/dev/null)
     lock_owner_alive "$oldpid" && return 1
 
-    log "prebiram zastaraly zamek po pidu ${oldpid:-<prazdny>}"
     rm -rf "$lockdir" 2>/dev/null
     if mkdir "$lockdir" 2>/dev/null; then
         echo $$ > "$lockdir/pid" 2>/dev/null
+        # Az tady, aby log netvrdil prevzeti, ktere se nepovedlo.
+        log "prevzat zastaraly zamek po pidu ${oldpid:-<prazdny>}"
         return 0
     fi
     return 1

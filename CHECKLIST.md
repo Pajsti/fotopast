@@ -194,11 +194,17 @@ příkazy nejsou ve firmwaru vůbec, takže fáze 5 je bezpředmětná.
       nejstaršího dne", což je přesně dosavadní chování. Vytvoří se sám.
 - [ ] **Zkontrolovat `hunter/state/.lock`** — když tam je, smazat ho
       (`rm -rf`). Zabitý běh po sobě zámek nechá, po restartu se jeho
-      pid přidělí něčemu jinému, `acquire_lock` ho vyhodnotí jako živý
-      a Hunter pak **při každém probuzení jen zapíše „jina instance
-      hunter.sh uz bezi, koncim" a skončí** — tiše, navždy. Přesně to
+      pid přidělí něčemu jinému, `acquire_lock` ho vyhodnotil jako živý
+      a Hunter pak **při každém probuzení jen zapsal „jina instance
+      hunter.sh uz bezi, koncim" a skončil** — tiše, navždy. Přesně to
       se stalo 2026-09-01 20:12 a zjistilo se to až o dva dny později
-      při nasazení. Kontroluj to při každém zásahu do karty.
+      při nasazení.
+
+      **Od 2026-09-04 to `acquire_lock` řeší sám** (`lock_owner_alive`
+      ověřuje přes `/proc/<pid>/cmdline`, že za pidem opravdu stojí
+      `hunter.sh`), takže je to pojistka, ne nutnost. Do doby, než na
+      kartě bude nová `lib/common.sh`, na to ale spoléhat nelze —
+      kontroluj to při každém zásahu do karty.
 - [ ] Kartu vrátit, `md5sum` porovnat proti build stroji (`sh -n`
       nestačí).
 - [ ] Ruční běh: `sh /tmp/mnt/sdcard/hunter/hunter.sh`, pak v logu čekáš

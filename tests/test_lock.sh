@@ -80,6 +80,41 @@ acquire_lock && r=0 || r=1
 assert_eq "necislo v pid souboru zamek nedrzi" "$r" "0"
 release_lock
 
+# --- pid "0": zamek se zotavi ---
+# Zradne: "kill -0 0" miri na vlastni skupinu procesu a VZDY uspeje,
+# ale /proc/0 neexistuje, takze by to spadlo do vetve "neumim
+# rozhodnout, ber to jako zive" a zamek by drzel navzdy. Cislo 0 zadny
+# proces nema, takze je to vzdycky zbytek.
+rm -rf "$LOCKDIR"
+mkdir -p "$LOCKDIR"
+echo 0 > "$LOCKDIR/pid"
+acquire_lock && r=0 || r=1
+assert_eq "pid 0 zamek nedrzi" "$r" "0"
+release_lock
+
+# --- pid rovny nasemu vlastnimu ---
+# Po restartu se pidy recykluji od nizkych cisel, takze zamek muze nest
+# tetez cislo, jake dostane novy beh. Na zarizeni by pak kill -0 i
+# cmdline nutne odpovedely "zije hunter.sh" - je to totiz nas vlastni
+# proces. Jenze dva procesy nemuzou drzet tentyz pid zaroven, takze
+# takovy zamek je vzdycky zbytek po mrtvem predchudci.
+#
+# Nestaci zavolat lock_owner_alive "$$" primo z tohohle testu: cmdline
+# testovaciho shellu je "dash tests/test_lock.sh", takze by odpoved
+# "nezije" prisla uz z kontroly cmdline a pojistka na vlastni pid by
+# se vubec nezavadila. Test by prosel, i kdyby v kodu nebyla.
+#
+# Reprodukujeme to tedy poctive: skriptem, ktery se JMENUJE hunter.sh,
+# takze jeho cmdline vypada presne jako na zarizeni.
+mkdir -p "$FIX/self"
+cat > "$FIX/self/hunter.sh" <<EOF
+. "$ROOT/hunter/lib/common.sh"
+lock_owner_alive \$\$ && exit 0
+exit 1
+EOF
+dash "$FIX/self/hunter.sh" && r=0 || r=1
+assert_eq "vlastni pid se nepovazuje za ziveho drzitele" "$r" "1"
+
 # --- poctive odmitnuti: zamek drzi skutecny bezici hunter.sh ---
 # Spustime skutecny proces, jehoz cmdline obsahuje "hunter.sh", a
 # zapiseme jeho pid do zamku. Tenhle pripad se zotavit NESMI.
