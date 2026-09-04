@@ -34,25 +34,56 @@ rotate_log_if_needed() {
     fi
 }
 
+# lock_owner_alive <pid>
+# 0, kdyz to cislo opravdu bezi A patri hunter.sh.
+#
+# Nestaci se ptat "zije ten pid?". Zarizeni se pri kazdem probuzeni
+# restartuje a pidy se recykluji od nizkych cisel, takze zaznamenane
+# cislo po restartu skoro jiste patri necemu uplne jinemu.
+#
+# Presne tohle 2026-09-01 zabilo Huntera na dva dny: beh zabity behem
+# restartovaci smycky nechal na karte zamek s pid 235, to cislo po
+# restartu dostal systemovy proces, kill -0 uspelo a kazde dalsi
+# probuzeni jen zapsalo "jina instance uz bezi" a skoncilo. Zadne
+# hlaseni, zadne zotaveni - dva dny nic.
+#
+# Kdyz /proc/<pid>/cmdline nejde precist, nedokazeme rozhodnout a
+# vracime "zije". Radsi pockat jedno probuzeni nez pustit dve instance
+# najednou nad sent_list.txt.
+lock_owner_alive() {
+    case "$1" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    kill -0 "$1" 2>/dev/null || return 1
+    [ -r "/proc/$1/cmdline" ] || return 0
+    grep -q hunter.sh "/proc/$1/cmdline" 2>/dev/null
+}
+
 # acquire_lock
-# Zamek pres mkdir (atomicka operace i na FAT/exFAT). Kdyz adresar zamku
-# existuje po vypadku napajeni z minuleho behu, PID v nem uz nebezi
-# (kazdy boot ma nova PID) - takovy zamek se bezpecne prevezme.
+# Zamek pres mkdir (atomicka operace i na FAT/exFAT).
+#
+# Cisty konec i odchytitelny signal zamek uvolni pres cleanup() v
+# hunter.sh. Co po sobe zamek necha, je SIGKILL nebo vypadek napajeni -
+# a takovy zbytek se musi dat prevzit, jinak Hunter umlkne napord.
+# Rozhoduje o tom lock_owner_alive, ne pouhe kill -0.
 acquire_lock() {
     lockdir="$STATE_DIR/.lock"
     if mkdir "$lockdir" 2>/dev/null; then
         echo $$ > "$lockdir/pid" 2>/dev/null
         return 0
     fi
-    if [ -f "$lockdir/pid" ]; then
-        oldpid=$(cat "$lockdir/pid" 2>/dev/null)
-        if [ -n "$oldpid" ] && ! kill -0 "$oldpid" 2>/dev/null; then
-            rm -rf "$lockdir" 2>/dev/null
-            if mkdir "$lockdir" 2>/dev/null; then
-                echo $$ > "$lockdir/pid" 2>/dev/null
-                return 0
-            fi
-        fi
+
+    # Zamek uz existuje. Chybejici, prazdny nebo posahany soubor pid
+    # spadne v lock_owner_alive do "nezije" - drive na nej neexistovala
+    # zadna cesta k zotaveni a zamek by drzel navzdy.
+    oldpid=$(cat "$lockdir/pid" 2>/dev/null)
+    lock_owner_alive "$oldpid" && return 1
+
+    log "prebiram zastaraly zamek po pidu ${oldpid:-<prazdny>}"
+    rm -rf "$lockdir" 2>/dev/null
+    if mkdir "$lockdir" 2>/dev/null; then
+        echo $$ > "$lockdir/pid" 2>/dev/null
+        return 0
     fi
     return 1
 }

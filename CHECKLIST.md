@@ -227,6 +227,15 @@ příkazy nejsou ve firmwaru vůbec, takže fáze 5 je bezpředmětná.
       /tmp/mnt/sdcard/hunter/bin/mailrecv 2>&1 | grep -q append \
         && echo "OK, umi append" || echo "STARA BINARKA"
       ```
+- [ ] **Jednorázově ověřit, že `/proc/<pid>/cmdline` jde na zařízení
+      přečíst** — na tom stojí nová kontrola zámku (`lock_owner_alive`).
+      Když čitelné není, kód se schválně chová opatrně a považuje
+      držitele za živého, což by při zaseklém zámku znamenalo tichý
+      návrat k chování z 1. 9.:
+      ```sh
+      cat /proc/$$/cmdline | tr '\0' ' '; echo
+      ```
+      Musí vypsat příkazovou řádku shellu, ne prázdno ani chybu.
 - [ ] **Zkontrolovat `hunter/state/.lock`** — když tam je, smazat ho.
       Viz fáze 9, proč na to nezapomínat.
 - [ ] Kartu vrátit, `dev-resume.sh`.
