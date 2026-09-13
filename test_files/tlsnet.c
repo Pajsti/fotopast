@@ -336,6 +336,11 @@ void tlsnet_connect(const char *host, const char *port)
             tv.tv_sec = CONNECT_TIMEOUT_MS / 1000;
             tv.tv_usec = (CONNECT_TIMEOUT_MS % 1000) * 1000;
 
+            /* Timeout i chyba selectu spadnou sem zamerne. EINTR by
+             * hlasku zkreslil, ale zadny z nastroju signalovy handler
+             * neinstaluje, takze doruceny signal proces rovnou ukonci a
+             * select() se sem s EINTR nedostane. Kdyby nekdo handler
+             * pridal, tuhle hlasku je potreba rozlisit. */
             if (select(fd + 1, NULL, &wfds, NULL, &tv) <= 0) {
                 char errmsg[300];
                 close(fd);

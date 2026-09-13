@@ -123,7 +123,8 @@ deadline_kill_tools() {
     for _t in mailrecv mailsend atcmd smssend smsrecv; do
         _p=$(pidof "$_t" 2>/dev/null)
         # Zamerne bez uvozovek: pidof vraci PID oddelene mezerou a
-        # chceme poslat signal vsem.
+        # chceme poslat signal vsem. Vystup pidof se zamerne nevaliduje -
+        # stejna duvera jako u ubia_first v hunter.sh.
         [ -n "$_p" ] && kill -TERM $_p 2>/dev/null
     done
     return 0

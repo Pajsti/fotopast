@@ -252,6 +252,18 @@ příkazy nejsou ve firmwaru vůbec, takže fáze 5 je bezpředmětná.
       ```
       Čekáš `connect() na 10.255.255.1:993 nestihl 15 s` a návrat do
       patnácti vteřin, ne minuty ticha.
+- [ ] **Ověřit timeout zápisu** — druhá polovina téže opravy
+      (`SO_SNDTIMEO`), a jako jediná není pokrytá žádným testem. Potřebuje
+      protistranu, která spojení **přijme, ale nečte**: na Raspberry
+      spusť `nc -l -p 2525`, v `hunter/config.txt` dočasně nastav
+      `SMTP_HOST=<IP Raspberry>`, `SMTP_PORT=2525`, `SMTP_TLS=none` a
+      počkej na fotku. Odesílací buffer se u ~400 kB přílohy zaplní a
+      `mailsend` musí skončit chybou do ~30 s, ne viset až na
+      `RUN_DEADLINE`. Pak hodnoty vrátit.
+
+      Kdyby to viselo dál, není to kritické — pojistka `deadline_kill_tools`
+      zaseklý nástroj zabije tak jako tak. Znamenalo by to jen, že se
+      chyba pozná až po třech minutách místo po třiceti vteřinách.
 - [ ] **Zkontrolovat `hunter/state/.lock`** — když tam je, smazat ho.
       Viz fáze 9, proč na to nezapomínat.
 - [ ] Kartu vrátit, `dev-resume.sh`.
