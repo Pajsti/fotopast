@@ -104,6 +104,31 @@ release_lock() {
     rm -rf "$STATE_DIR/.lock" 2>/dev/null
 }
 
+# deadline_kill_tools
+# Posle SIGTERM vsem sitovym nastrojum, ktere jeste bezi.
+#
+# Proc to existuje: kdyz hlavni beh visi v prikazove substituci - treba
+# na "listing=$(mailrecv_run list unseen)" pri zaseklem spojeni - SIGTERM
+# poslany SAMOTNEMU shellu se jen ODLOZI. POSIX shell zpracuje trap az
+# potom, co dite skonci. Nasledny SIGKILL uz cleanup obejde uplne:
+# ubia_first zustane zmrazena a zamek lezet na karte.
+#
+# 2026-09-06 takhle skoncilo 18 behu za sebou. Zabitim ditete se shell
+# odblokuje, trap probehne normalne a cleanup uklidi.
+#
+# Nastroje se hledaji pres pidof - shodny postup jako u ubia_first. Dve
+# instance hunter.sh zaroven nehrozi, o to se stara zamek, takze cizi
+# proces tu zabit nemuzeme.
+deadline_kill_tools() {
+    for _t in mailrecv mailsend atcmd smssend smsrecv; do
+        _p=$(pidof "$_t" 2>/dev/null)
+        # Zamerne bez uvozovek: pidof vraci PID oddelene mezerou a
+        # chceme poslat signal vsem.
+        [ -n "$_p" ] && kill -TERM $_p 2>/dev/null
+    done
+    return 0
+}
+
 # trim <retezec>
 # Osekne uvodni a koncove mezery/taby. Bez sed - po jednom znaku pres
 # case, ale retezce jsou kratke (SMS max 160 znaku), takze O(n) nevadi.

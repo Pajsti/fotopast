@@ -242,6 +242,16 @@ příkazy nejsou ve firmwaru vůbec, takže fáze 5 je bezpředmětná.
       cat /proc/$$/cmdline | tr '\0' ' '; echo
       ```
       Musí vypsat příkazovou řádku shellu, ne prázdno ani chybu.
+- [ ] **Ověřit timeout connectu** — `tlsnet` nově nečeká na spojení
+      donekonečna (15 s). Bez toho visel `mailrecv` na zaseklém spojení
+      tak dlouho, že pojistka musela běh zabít natvrdo a `cleanup`
+      neproběhl. Na nesměrovatelnou adresu musí skončit do ~15 s:
+      ```sh
+      time /tmp/mnt/sdcard/hunter/bin/mailrecv 10.255.255.1 993 \
+        x --pass-file /tmp/mnt/sdcard/hunter/smtp.pass list unseen
+      ```
+      Čekáš `connect() na 10.255.255.1:993 nestihl 15 s` a návrat do
+      patnácti vteřin, ne minuty ticha.
 - [ ] **Zkontrolovat `hunter/state/.lock`** — když tam je, smazat ho.
       Viz fáze 9, proč na to nezapomínat.
 - [ ] Kartu vrátit, `dev-resume.sh`.

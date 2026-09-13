@@ -12,6 +12,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/select.h>
+#include <sys/time.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
@@ -25,6 +27,7 @@
 #include "tlsnet.h"
 
 #define IO_TIMEOUT_MS 30000
+#define CONNECT_TIMEOUT_MS 15000
 #define RBUF_SZ 4096
 
 static mbedtls_net_context      net_ctx;
@@ -283,7 +286,7 @@ void tlsnet_connect(const char *host, const char *port)
 
     if (resolve_ipv4(host, &addr) != 0) {
         char errmsg[300];
-        snprintf(errmsg, sizeof(errmsg), "nepodarilo se preložit '%s' (DNS)", host);
+        snprintf(errmsg, sizeof(errmsg), "nepodarilo se prelozit '%s' (DNS)", host);
         tlsnet_die(2, errmsg);
     }
     if (verbose)
@@ -297,13 +300,82 @@ void tlsnet_connect(const char *host, const char *port)
     sa.sin_port = htons(portnum);
     sa.sin_addr = addr;
 
-    if (connect(fd, (struct sockaddr *)&sa, sizeof(sa)) != 0) {
-        char errmsg[300];
-        close(fd);
-        snprintf(errmsg, sizeof(errmsg), "connect() na %s:%d selhal: %s",
-                 host, portnum, strerror(errno));
-        tlsnet_die(2, errmsg);
+    /* Neblokujici connect() se select(). Blokujici connect() nema ZADNY
+     * timeout: kernel zkousi SYN s exponencialnim backoffem
+     * (tcp_syn_retries), takze na zaseknutem mobilnim spojeni drzi
+     * minuty. Beh se pak nevrati vcas, vnejsi pojistka v hunter.sh ho
+     * musi zabit - a kdyz visi v prikazove substituci, SIGTERM se odlozi
+     * a nasledny SIGKILL obejde cleanup (zamek zustane, ubia_first
+     * zustane zmrazena). Viz log z 2026-09-06. */
+    {
+        int flags = fcntl(fd, F_GETFL, 0);
+        int rc;
+
+        if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+            close(fd);
+            tlsnet_die(2, "nepodarilo se prepnout socket na neblokujici");
+        }
+
+        rc = connect(fd, (struct sockaddr *)&sa, sizeof(sa));
+        if (rc != 0 && errno != EINPROGRESS) {
+            char errmsg[300];
+            close(fd);
+            snprintf(errmsg, sizeof(errmsg), "connect() na %s:%d selhal: %s",
+                     host, portnum, strerror(errno));
+            tlsnet_die(2, errmsg);
+        }
+
+        if (rc != 0) {
+            fd_set wfds;
+            struct timeval tv;
+            int soerr = 0;
+            socklen_t slen = sizeof(soerr);
+
+            FD_ZERO(&wfds);
+            FD_SET(fd, &wfds);
+            tv.tv_sec = CONNECT_TIMEOUT_MS / 1000;
+            tv.tv_usec = (CONNECT_TIMEOUT_MS % 1000) * 1000;
+
+            if (select(fd + 1, NULL, &wfds, NULL, &tv) <= 0) {
+                char errmsg[300];
+                close(fd);
+                snprintf(errmsg, sizeof(errmsg),
+                         "connect() na %s:%d nestihl %d s", host, portnum,
+                         CONNECT_TIMEOUT_MS / 1000);
+                tlsnet_die(2, errmsg);
+            }
+
+            /* select() rekl jen "hotovo", ne "uspesne" - skutecny vysledek
+             * je v SO_ERROR. */
+            if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &soerr, &slen) != 0 ||
+                soerr != 0) {
+                char errmsg[300];
+                close(fd);
+                snprintf(errmsg, sizeof(errmsg), "connect() na %s:%d selhal: %s",
+                         host, portnum, strerror(soerr ? soerr : errno));
+                tlsnet_die(2, errmsg);
+            }
+        }
+
+        /* Zpatky do blokujiciho rezimu: mbedtls_net_recv_timeout i nas
+         * zapis s blokujicim socketem pocitaji. */
+        if (fcntl(fd, F_SETFL, flags) < 0) {
+            close(fd);
+            tlsnet_die(2, "nepodarilo se vratit socket do blokujiciho rezimu");
+        }
     }
+
+    /* SO_SNDTIMEO: bez nej mbedtls_net_send na blokujicim socketu ceka
+     * donekonecna, jakmile se zaplni odesilaci buffer (zaseknuty link).
+     * Cteni timeout melo uz drive (IO_TIMEOUT_MS pres
+     * mbedtls_net_recv_timeout), zapis zadny. */
+    {
+        struct timeval tv;
+        tv.tv_sec = IO_TIMEOUT_MS / 1000;
+        tv.tv_usec = (IO_TIMEOUT_MS % 1000) * 1000;
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    }
+
     net_ctx.fd = fd;
 }
 

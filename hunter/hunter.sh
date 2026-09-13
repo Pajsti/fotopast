@@ -96,11 +96,20 @@ ensure_app_frozen() {
 }
 
 # vnejsi pojistka: kdyby hlavni beh z nejakeho duvodu neskoncil do
-# RUN_DEADLINE, ukonci ho natvrdo. Vlastni C nastroje (atcmd/smssend/
-# smsrecv/mailsend) uz maji vlastni timeouty na kazde operaci - tohle je
-# jen posledni pojistka pro pripad, ze by neco viselo jinak, nez cekame.
+# RUN_DEADLINE, ukonci ho natvrdo.
+#
+# Poradi je tu nosne. Nejdriv SIGTERM sitovym nastrojum, teprve pak
+# shellu: kdyz hlavni beh visi v prikazove substituci (mailrecv na
+# zaseklem spojeni), SIGTERM poslany JEN shellu se odlozi - POSIX shell
+# zpracuje trap az potom, co dite skonci - a nasledny SIGKILL uz cleanup
+# obejde uplne. Zustala by zmrazena ubia_first a zamek lezet na karte.
+# 2026-09-06 takhle skoncilo 18 behu za sebou.
+#
+# Timeouty uvnitr nastroju to nenahrazuji: tlsnet ma timeout na cteni
+# (30 s) a DNS (5 s), ale connect() a zapis omezene nejsou.
 (
     sleep "$RUN_DEADLINE"
+    deadline_kill_tools
     kill -TERM "$MAIN_PID" 2>/dev/null
     sleep 5
     kill -KILL "$MAIN_PID" 2>/dev/null
