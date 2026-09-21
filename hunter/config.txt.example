@@ -71,13 +71,19 @@ IMAP_PORT=993
 # stejne dela kvuli prikazum - operator nema co chytit.
 SEND_TRANSPORT=smtp
 
-# Slozka na tomtez uctu, kam se uklada pres IMAP APPEND. Zaklada se
-# sama, kdyz neexistuje.
+# Slozka na tomtez uctu, kam se uklada pres IMAP APPEND fotka. Zaklada
+# se sama, kdyz neexistuje.
 #
 # NESMI byt INBOX: prikazy se hledaji pres SEARCH UNSEEN prave tam,
 # takze by si Hunter vlastni ulozene fotky precetl jako prichozi
 # prikazy. Kdyz sem INBOX napises, kod ho odmitne a pouzije Fotopast.
 IMAP_SAVE_FOLDER=Fotopast
+
+# Slozka, kam se pres IMAP APPEND uklada ODPOVED na prikaz (STATUS,
+# LAST, ...) - nezavisle od IMAP_SAVE_FOLDER vyse. Prazdne = stejna
+# slozka jako fotky (dosavadni chovani). Stejny zakaz INBOX plati i
+# tady - pri poruseni se pouzije IMAP_SAVE_FOLDER.
+IMAP_REPLY_FOLDER=
 
 # Autorizovane e-mailove adresy pro prikazy, oddelene carkami.
 # Piste malymi pismeny.

@@ -361,6 +361,19 @@ validate_transport() {
         log "IMAP_SAVE_FOLDER nesmi byt INBOX - pouzivam Fotopast"
         IMAP_SAVE_FOLDER=Fotopast
     fi
+
+    # Odpovedi na prikazy muzou jit do jine slozky nez fotky. Prazdne
+    # nastaveni znamena "stejna slozka jako fotky" - dosavadni chovani
+    # pro karty, ktere IMAP_REPLY_FOLDER vubec nemaji nastavene. Fallback
+    # az TADY, po uklidu IMAP_SAVE_FOLDER vyse, aby se do nej nemohl
+    # propsat neopraveny INBOX.
+    [ -n "$IMAP_REPLY_FOLDER" ] || IMAP_REPLY_FOLDER="$IMAP_SAVE_FOLDER"
+
+    _irf_low=$(printf '%s' "$IMAP_REPLY_FOLDER" | tr 'A-Z' 'a-z')
+    if [ "$_irf_low" = "inbox" ]; then
+        log "IMAP_REPLY_FOLDER nesmi byt INBOX - pouzivam $IMAP_SAVE_FOLDER"
+        IMAP_REPLY_FOLDER="$IMAP_SAVE_FOLDER"
+    fi
 }
 
 # load_config
@@ -409,6 +422,7 @@ load_config() {
     #   smtp+imap  oboji vzdy, dve kopie
     : "${SEND_TRANSPORT:=smtp}"
     : "${IMAP_SAVE_FOLDER:=Fotopast}"
+    : "${IMAP_REPLY_FOLDER:=}"
     validate_transport
     : "${IMAP_PORT:=993}"
     : "${TOKEN_FILE:=$HUNTER_DIR/mail.token}"

@@ -168,6 +168,11 @@ stejně dělá kvůli příkazům — heuristika nemá co chytit.
 Nastavení platí **i pro odpovědi na příkazy**. Když je SMTP zablokované,
 odpověď na `STATUS` se objeví ve složce.
 
+**Odpovědi mají vlastní složku.** `IMAP_REPLY_FOLDER` řídí, kam se ukládají
+odpovědi na příkazy — nezávisle na `IMAP_SAVE_FOLDER`, kam jdou fotky.
+Prázdné (výchozí) znamená stejnou složku jako fotky. Stejný zákaz `INBOX`
+platí i tady.
+
 **Příjem příkazů to neovlivňuje** — ten jde přes IMAP vždycky.
 
 **Co za to:** zpráva uložená do složky nedorazí jako nová pošta, takže
@@ -175,12 +180,12 @@ nepřijde notifikace — do složky se musíš podívat. A uloží se jen na ú�
 fotopasti; `SMTP_TO` může být jiná adresa, ale `APPEND` umí jen tentýž
 účet, přes který se přihlašuje.
 
-`IMAP_SAVE_FOLDER` **nesmí být `INBOX`**: příkazy se hledají přes
-`SEARCH UNSEEN` právě tam, takže by si Hunter vlastní uložené fotky
-přečetl jako příchozí příkazy. Když tam INBOX napíšeš, kód ho odmítne
-a použije `Fotopast`.
+`IMAP_SAVE_FOLDER` ani `IMAP_REPLY_FOLDER` **nesmí být `INBOX`**: příkazy
+se hledají přes `SEARCH UNSEEN` právě tam, takže by si Hunter vlastní
+uložené zprávy přečetl jako příchozí příkazy. Když tam INBOX napíšeš,
+kód ho odmítne a použije `IMAP_SAVE_FOLDER`.
 
-`IMAP_SAVE_FOLDER` by měl být jednoduchý název bez vnořování — oddělovač
+Obě složky by měly být jednoduché názvy bez vnořování — oddělovač
 hierarchie složek si určuje server sám (`.` u jednoho, `/` u druhého) a
 `CREATE` vnořené složky na serverech, které vyžadují existující rodičovskou
 složku, selže.

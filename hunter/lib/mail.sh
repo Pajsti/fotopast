@@ -278,48 +278,55 @@ send_via_smtp() {
     fi
 }
 
-# send_via_imap <komu> <predmet> <telo> [priloha]
-# Ulozi zpravu pres IMAP APPEND do IMAP_SAVE_FOLDER na tomtez uctu.
-# Neni to odeslani - zprava se objevi ve slozce, ne ve schrance.
+# send_via_imap <slozka> <komu> <predmet> <telo> [priloha]
+# Ulozi zpravu pres IMAP APPEND do zadane slozky na tomtez uctu. Slozka
+# je parametr, ne globalka - volajici (send_message) vzdy rekne, kam to
+# ma jit, takze fotky a odpovedi se nemuzou omylem zamenit. Neni to
+# odeslani - zprava se objevi ve slozce, ne ve schrance.
 send_via_imap() {
-    if [ -n "$4" ]; then
-        mailrecv_run append "$IMAP_SAVE_FOLDER" \
-            --from "$SMTP_USER" --to "$1" --subject "$2" --body "$3" \
-            --attach "$4" \
+    if [ -n "$5" ]; then
+        mailrecv_run append "$1" \
+            --from "$SMTP_USER" --to "$2" --subject "$3" --body "$4" \
+            --attach "$5" \
             >> "$LOG_FILE" 2>&1
     else
-        mailrecv_run append "$IMAP_SAVE_FOLDER" \
-            --from "$SMTP_USER" --to "$1" --subject "$2" --body "$3" \
+        mailrecv_run append "$1" \
+            --from "$SMTP_USER" --to "$2" --subject "$3" --body "$4" \
             >> "$LOG_FILE" 2>&1
     fi
 }
 
-# send_message <komu> <predmet> <telo> [priloha]
-# Odesle zpravu podle SEND_TRANSPORT. Vraci 0, kdyz uspel ASPON JEDEN
-# zvoleny transport (spec 4.1) - kdyby se u smtp+imap vyzadovaly oba,
-# vypadek IMAPu by donekonecna preposilal fotku, kterou uzivatel uz ma.
+# send_message <komu> <predmet> <telo> <priloha> <imap_slozka>
+# Odesle zpravu podle SEND_TRANSPORT. <priloha> smi byt prazdna.
+# <imap_slozka> urcuje cil pro vetve pouzivajici IMAP - send_snap
+# preda IMAP_SAVE_FOLDER, send_reply_mail preda IMAP_REPLY_FOLDER.
+# SMTP vetve pate parametry ignoruji.
+#
+# Vraci 0, kdyz uspel ASPON JEDEN zvoleny transport (spec 4.1) - kdyby
+# se u smtp+imap vyzadovaly oba, vypadek IMAPu by donekonecna
+# preposilal fotku, kterou uzivatel uz ma.
 send_message() {
     case "$SEND_TRANSPORT" in
         smtp)
             send_via_smtp "$1" "$2" "$3" "$4"
             ;;
         imap)
-            send_via_imap "$1" "$2" "$3" "$4"
+            send_via_imap "$5" "$1" "$2" "$3" "$4"
             ;;
         smtp-imap)
             send_via_smtp "$1" "$2" "$3" "$4" && return 0
             log "SMTP selhalo, zkousim ulozit pres IMAP"
-            send_via_imap "$1" "$2" "$3" "$4"
+            send_via_imap "$5" "$1" "$2" "$3" "$4"
             ;;
         imap-smtp)
-            send_via_imap "$1" "$2" "$3" "$4" && return 0
+            send_via_imap "$5" "$1" "$2" "$3" "$4" && return 0
             log "IMAP selhalo, zkousim poslat mailem"
             send_via_smtp "$1" "$2" "$3" "$4"
             ;;
         smtp+imap)
             _sm_ok=1
             send_via_smtp "$1" "$2" "$3" "$4" && _sm_ok=0
-            send_via_imap "$1" "$2" "$3" "$4" && _sm_ok=0
+            send_via_imap "$5" "$1" "$2" "$3" "$4" && _sm_ok=0
             return "$_sm_ok"
             ;;
         *)
@@ -348,14 +355,16 @@ send_snap() {
     attach_path=$(resolve_attach_path "$snap_path" "$daydir" "$fname")
     log "kvalita: QUALITY=$QUALITY, priloha=$attach_path"
 
-    send_message "$SMTP_TO" "$subject" "$body" "$attach_path"
+    send_message "$SMTP_TO" "$subject" "$body" "$attach_path" "$IMAP_SAVE_FOLDER"
 }
 
 # send_reply_mail <komu> <text>
 # Odpoved na prikaz, jde stejnym dispecerem jako fotky (spec 3) - jedno
-# nastaveni SEND_TRANSPORT tak plati pro obe a nemuze se rozejit.
+# nastaveni SEND_TRANSPORT tak plati pro obe a nemuze se rozejit. V
+# IMAP vetvich konci ve vlastni slozce (IMAP_REPLY_FOLDER), oddelene od
+# fotek - viz validate_transport pro vychozi hodnotu.
 # Predmet je VZDY "HUNTER reply" - prichozi predmet se NIKDY necituje,
 # protoze je v nem token.
 send_reply_mail() {
-    send_message "$1" "HUNTER reply" "$2"
+    send_message "$1" "HUNTER reply" "$2" "" "$IMAP_REPLY_FOLDER"
 }

@@ -287,6 +287,12 @@ příkazy nejsou ve firmwaru vůbec, takže fáze 5 je bezpředmětná.
       `dev-resume.sh`. Bez toho zůstane odesílání mailem rozbité.
 - [ ] `HUNTER <token> STATUS` → odpověď musí dorazit stejnou cestou jako
       fotky.
+- [ ] **Oddělená složka pro odpovědi.** Do `config.txt` doplnit
+      `IMAP_REPLY_FOLDER=Prikazy` (jiná než `IMAP_SAVE_FOLDER`), vrátit
+      kartu, `dev-resume.sh`. Poslat `HUNTER <token> STATUS` — odpověď
+      musí přistát ve složce `Prikazy`, další fotka pořád ve `Fotopast`.
+      Pak `IMAP_REPLY_FOLDER` zase smazat (prázdné = stejná složka jako
+      fotky), ať zůstane výchozí chování pro ostrý provoz.
 
 ## Prvních pár dní sledovat
 
