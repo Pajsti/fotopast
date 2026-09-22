@@ -19,6 +19,31 @@ log() {
     printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG_FILE"
 }
 
+# log_error <zprava>
+# Jako log() navic - kdyz je IMAP_ERROR_FOLDER nastaveny, zkusi zpravu
+# ulozit pres IMAP APPEND i do teto slozky. Nezavisle na SEND_TRANSPORT:
+# chybove hlaseni musi jit i kdyz SEND_TRANSPORT=smtp, protoze prave
+# IMAP muze byt to jedine, co jeste funguje.
+#
+# Bez limitu na pocet - kazdy vyskyt se posila znovu, i kdyz je stejny
+# jako minule (rozhodnuti 2026-09-22). Volajici musi sam hlidat, aby
+# nevolal log_error v souvislosti, ktera by se opakovala kazdou vterinu.
+#
+# Cely IMAP pokus je best-effort a nikdy nesmi shodit volajiciho: kdyz
+# IMAP_ERROR_FOLDER neni nastaveny, IMAP_HOST chybi, nebo mailrecv_run
+# jeste neni definovana (sourcovani mimo poradi, napr. common.sh sam v
+# testu), proste se preskoci - zprava zustane aspon v log.txt.
+log_error() {
+    log "$1"
+    [ -n "$IMAP_ERROR_FOLDER" ] || return 0
+    [ -n "$IMAP_HOST" ] || return 0
+    command -v mailrecv_run >/dev/null 2>&1 || return 0
+    mailrecv_run append "$IMAP_ERROR_FOLDER" \
+        --from "$SMTP_USER" --to "$SMTP_TO" --subject "HUNTER error" \
+        --body "$1" \
+        >> "$LOG_FILE" 2>&1
+}
+
 # rotate_log_if_needed
 # Bez wc/du merime velikost pres `stat -c %s`. Pri prekroceni 1 MB se
 # stary log prepise na log.txt.old (jedna generace zpetne staci - Hunter
@@ -374,6 +399,19 @@ validate_transport() {
         log "IMAP_REPLY_FOLDER nesmi byt INBOX - pouzivam $IMAP_SAVE_FOLDER"
         IMAP_REPLY_FOLDER="$IMAP_SAVE_FOLDER"
     fi
+
+    # IMAP_ERROR_FOLDER je na rozdil od predchozich dvou VYPNUTY, kdyz je
+    # prazdny - zadny fallback na Fotopast, protoze chybova hlaseni
+    # nejsou pozadovana vychozi funkce (viz log_error nize). INBOX se
+    # tu neopravuje na nahradni slozku, proste se funkce vypne - neni
+    # kam bezpecne spadnout, kdyz uzivatel omylem napsal INBOX.
+    if [ -n "$IMAP_ERROR_FOLDER" ]; then
+        _ief_low=$(printf '%s' "$IMAP_ERROR_FOLDER" | tr 'A-Z' 'a-z')
+        if [ "$_ief_low" = "inbox" ]; then
+            log "IMAP_ERROR_FOLDER nesmi byt INBOX - chybova hlaseni pres IMAP vypinam"
+            IMAP_ERROR_FOLDER=""
+        fi
+    fi
 }
 
 # load_config
@@ -382,7 +420,7 @@ validate_transport() {
 # chybejici nepovinne klice vychozimi hodnotami.
 load_config() {
     if [ ! -f "$CONFIG_FILE" ]; then
-        log "CHYBA: chybi $CONFIG_FILE, koncim"
+        log_error "CHYBA: chybi $CONFIG_FILE, koncim"
         exit 1
     fi
     . "$CONFIG_FILE"
@@ -423,6 +461,7 @@ load_config() {
     : "${SEND_TRANSPORT:=smtp}"
     : "${IMAP_SAVE_FOLDER:=Fotopast}"
     : "${IMAP_REPLY_FOLDER:=}"
+    : "${IMAP_ERROR_FOLDER:=}"
     validate_transport
     : "${IMAP_PORT:=993}"
     : "${TOKEN_FILE:=$HUNTER_DIR/mail.token}"
@@ -445,7 +484,7 @@ load_config() {
     for req in SMTP_HOST SMTP_PORT SMTP_USER SMTP_TO AT_PORT; do
         eval "val=\${$req:-}"
         if [ -z "$val" ]; then
-            log "CHYBA: $req neni nastaveno v $CONFIG_FILE, koncim"
+            log_error "CHYBA: $req neni nastaveno v $CONFIG_FILE, koncim"
             exit 1
         fi
     done

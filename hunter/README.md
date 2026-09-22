@@ -173,6 +173,15 @@ odpovědi na příkazy — nezávisle na `IMAP_SAVE_FOLDER`, kam jdou fotky.
 Prázdné (výchozí) znamená stejnou složku jako fotky. Stejný zákaz `INBOX`
 platí i tady.
 
+**Chyby mají taky vlastní složku, ale je vypnutá ve výchozím stavu.**
+`IMAP_ERROR_FOLDER` — když je nastavená, `log_error()` (viz
+`lib/common.sh`) kromě zápisu do `log.txt` zkusí uložit hlášení i sem,
+přes IMAP APPEND, **nezávisle na `SEND_TRANSPORT`** (i při
+`SEND_TRANSPORT=smtp` — chyba se hlásí přes IMAP, protože to může být
+to jediné, co ještě funguje). Bez limitu na počet: při trvale rozbité
+věci počítej s opakovanými zprávami při každém probuzení. Prázdné
+(výchozí) = úplně vypnuto.
+
 **Příjem příkazů to neovlivňuje** — ten jde přes IMAP vždycky.
 
 **Co za to:** zpráva uložená do složky nedorazí jako nová pošta, takže
@@ -180,10 +189,12 @@ nepřijde notifikace — do složky se musíš podívat. A uloží se jen na ú�
 fotopasti; `SMTP_TO` může být jiná adresa, ale `APPEND` umí jen tentýž
 účet, přes který se přihlašuje.
 
-`IMAP_SAVE_FOLDER` ani `IMAP_REPLY_FOLDER` **nesmí být `INBOX`**: příkazy
-se hledají přes `SEARCH UNSEEN` právě tam, takže by si Hunter vlastní
-uložené zprávy přečetl jako příchozí příkazy. Když tam INBOX napíšeš,
-kód ho odmítne a použije `IMAP_SAVE_FOLDER`.
+`IMAP_SAVE_FOLDER`, `IMAP_REPLY_FOLDER` ani `IMAP_ERROR_FOLDER` **nesmí
+být `INBOX`**: příkazy se hledají přes `SEARCH UNSEEN` právě tam, takže
+by si Hunter vlastní uložené zprávy přečetl jako příchozí příkazy. Když
+tam INBOX napíšeš, kód ho odmítne — u prvních dvou použije
+`IMAP_SAVE_FOLDER`, u `IMAP_ERROR_FOLDER` se funkce prostě vypne (není
+kam bezpečně spadnout, chyby nejsou zapnuté ve výchozím stavu).
 
 Obě složky by měly být jednoduché názvy bez vnořování — oddělovač
 hierarchie složek si určuje server sám (`.` u jednoho, `/` u druhého) a

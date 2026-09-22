@@ -293,6 +293,13 @@ příkazy nejsou ve firmwaru vůbec, takže fáze 5 je bezpředmětná.
       musí přistát ve složce `Prikazy`, další fotka pořád ve `Fotopast`.
       Pak `IMAP_REPLY_FOLDER` zase smazat (prázdné = stejná složka jako
       fotky), ať zůstane výchozí chování pro ostrý provoz.
+- [ ] **Chybová složka.** Do `config.txt` doplnit `IMAP_ERROR_FOLDER=Errors`
+      a dočasně smazat/přejmenovat `hunter/config.txt` jinam tak, aby
+      `load_config` selhalo (nebo prostě dočasně vygumovat jeden
+      povinný klíč, např. `AT_PORT`). Vrátit kartu, `dev-resume.sh`,
+      počkat na probuzení. Ve složce `Errors` musí být zpráva s textem
+      chyby; v `log.txt` stejný text. Pak vrátit `config.txt` do
+      pořádku a `IMAP_ERROR_FOLDER` zase smazat (prázdné = vypnuto).
 
 ## Prvních pár dní sledovat
 

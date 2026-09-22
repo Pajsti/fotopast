@@ -258,7 +258,7 @@ $snap"*) ;;
             sent=$((sent + 1))
             log "odeslano: $snap"
         else
-            log "CHYBA pri odesilani (zkusi se priste): $snap"
+            log_error "CHYBA pri odesilani (zkusi se priste): $snap"
         fi
         IFS='
 '

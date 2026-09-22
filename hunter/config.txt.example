@@ -85,6 +85,16 @@ IMAP_SAVE_FOLDER=Fotopast
 # tady - pri poruseni se pouzije IMAP_SAVE_FOLDER.
 IMAP_REPLY_FOLDER=
 
+# Slozka, kam se pres IMAP APPEND uklada hlaseni CHYBY (chybejici
+# config, chybejici povinny klic, selhani odeslani fotky). Prazdne
+# (vychozi) = VYPNUTO, nic se neposila, chyby zustavaji jen v log.txt.
+# Nezavisle na SEND_TRANSPORT - jde vzdy pres IMAP, protoze IMAP muze
+# byt to jedine, co jeste funguje. Posila se KAZDY vyskyt, bez limitu -
+# pri trvale rozbite veci pocitej s opakovanymi zpravami. INBOX se
+# odmita jako u predchozich dvou, ale bez nahrady - funkce se proste
+# vypne.
+IMAP_ERROR_FOLDER=
+
 # Autorizovane e-mailove adresy pro prikazy, oddelene carkami.
 # Piste malymi pismeny.
 MAIL_MASTERS=paja.stindl@seznam.cz
