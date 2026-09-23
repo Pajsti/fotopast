@@ -23,3 +23,8 @@ dump/
 
 # Docasny soubor s IMAP heslem pro overeni pripojeni (Task 2) - nikdy do gitu
 imap pass.txt
+
+# Snapshot skutecneho obsahu SD karty pro obnovu po naformatovani -
+# obsahuje realne config.txt/smtp.pass/mail.token (secrets), nikdy do
+# gitu. Viz sdfactory/README.md.
+sdfactory/
