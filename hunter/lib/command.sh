@@ -431,7 +431,12 @@ execute_command() {
         [Ww][Ii][Pp][Ee]" "[Cc][Oo][Nn][Ff][Ii][Rr][Mm])
             wipe_sent_snaps
             if [ "$WIPE_REMAINING" -gt 0 ]; then
-                CMD_REPLY="WIPE PARTIAL ($WIPE_COUNT photos, $WIPE_REMAINING zbyva, $(get_space_gb) free)"
+                # Zbytek si Hunter dobere sam pri dalsich probuzenich.
+                # Znacku se zadatelovou adresou zaklada az transport -
+                # tenhle vykonavac o odesilateli nevi (viz komentar u
+                # wipe_continue_if_pending nize).
+                WIPE_CONTINUE=1
+                CMD_REPLY="WIPE STARTED ($WIPE_COUNT photos, $WIPE_REMAINING zbyva, pokracuji sam, $(get_space_gb) free)"
             else
                 CMD_REPLY="WIPE DONE ($WIPE_COUNT photos, $(get_space_gb) free)"
             fi
@@ -648,4 +653,60 @@ wipe_sent_snaps() {
     case "$WIPE_REMAINING" in
         ''|*[!0-9]*) WIPE_REMAINING=0 ;;
     esac
+}
+
+# --- rozdelane mazani pres vice probuzeni ---------------------------
+#
+# Jedno potvrzeni WIPE CONFIRM ma stacit na celou frontu: davky, ktere
+# se do prvniho behu nevesly, si Hunter odbava sam pri dalsich
+# probuzenich (rozhodnuti uzivatele 2026-09-23). Bez toho by u 5000
+# zaznamu a WIPE_BATCH=500 musel uzivatel poslat prikaz jedenactkrat.
+#
+# Stav drzi state/wipe_pending.txt, ktery nese ADRESU zadatele - bez ni
+# by na konci nebylo komu poslat zpravu, ze je hotovo. Znacka se zaklada
+# az v transportu (lib/mailcmd.sh), protoze execute_command je zamerne
+# transportne nezavisly a o odesilateli nevi nic; dava mu o tom vedet
+# jen priznakem WIPE_CONTINUE.
+
+wipe_pending_file() { printf '%s' "$STATE_DIR/wipe_pending.txt"; }
+
+# wipe_mark_pending <adresa>
+wipe_mark_pending() {
+    printf '%s\n' "$1" > "$(wipe_pending_file)"
+    sync
+}
+
+wipe_clear_pending() {
+    rm -f "$(wipe_pending_file)" 2>/dev/null
+    sync
+}
+
+# wipe_pending_addr - adresa zadatele, nebo prazdno kdyz se nic nemaze
+wipe_pending_addr() {
+    [ -f "$(wipe_pending_file)" ] || return 0
+    read -r _wpa < "$(wipe_pending_file)" 2>/dev/null
+    printf '%s' "$_wpa"
+}
+
+# wipe_continue_if_pending
+# Jedna davka za probuzeni, jen kdyz je rozdelane mazani. Vola se z
+# hunter.sh AZ PO odeslani fotek - fotky jsou hlavni ucel zarizeni a
+# mazani jim nesmi ujidat rozpocet behu.
+#
+# Kdyz uz nic nezbyva, znacku uklidi a naplni WIPE_DONE_NOTICE. Zpravu
+# NEPOSILA sama: odeslani je vec volajiciho (hunter.sh), aby tahle
+# funkce zustala testovatelna bez site.
+wipe_continue_if_pending() {
+    WIPE_DONE_NOTICE=""
+    _wcp_addr=$(wipe_pending_addr)
+    [ -n "$_wcp_addr" ] || return 0
+
+    wipe_sent_snaps
+    log "WIPE pokracuje: smazano $WIPE_COUNT, zbyva $WIPE_REMAINING"
+
+    if [ "$WIPE_REMAINING" -le 0 ]; then
+        wipe_clear_pending
+        WIPE_DONE_NOTICE="WIPE DONE (posledni davka $WIPE_COUNT photos, $(get_space_gb) free)"
+    fi
+    return 0
 }

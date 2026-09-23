@@ -4,9 +4,12 @@
 > po [README.md](../hunter/README.md), [CHECKLIST.md](../CHECKLIST.md)
 > a specifikacích v `docs/superpowers/specs/`. Necílí na to je
 > nahradit — README zůstává provozní návod k nasazení, CHECKLIST
-> zůstává testovací seznam. Tenhle dokument je referenční mapa:
-> architektura, kompletní seznam souborů/konfigurace/příkazů, chování
-> při chybách a obnova po nehodě. Datum poslední revize: 2026-09-23.
+> zůstává testovací seznam. Hledáš-li návod, jak Huntera **běžně
+> používat** (posílání příkazů, co který dělá), je to
+> [guide.md](../guide.md), ne tenhle dokument. Tenhle dokument je
+> referenční mapa: architektura, kompletní seznam souborů/konfigurace/
+> příkazů, chování při chybách a obnova po nehodě. Datum poslední
+> revize: 2026-09-23.
 
 ## Obsah
 
@@ -196,6 +199,7 @@ neexistuje. Nic v `hunter/state/` tedy nemusí existovat předem.
 | **Oba výše zároveň** | — | **Nejhorší případ:** rescan od nejstaršího dne + prázdný filtr → **znovu se pošlou úplně všechny fotky, co kdy na kartě byly**, postupně po dávkách `MAX_SEND_PER_WAKE`. |
 | `mail_seen.txt` | UID e-mailů, které už byly vykonány jako příkaz | Už vykonaný příkaz vypadá jako nový → **může se vykonat podruhé** (přijde druhá odpověď, případně druhé `WIPE` apod.). |
 | `sms_seen.txt` | Totéž pro SMS | Neškodné v praxi — SMS kanál je mrtvý kód (viz sekce 2). |
+| `wipe_pending.txt` | Adresa toho, kdo si vyžádal `WIPE`, dokud mazání běží přes víc probuzení | Rozdělané mazání se **zastaví** — zbylé záznamy prostě zůstanou v `sent_list.txt`. Nic se neztratí, jen se nedomaže; stačí poslat `WIPE CONFIRM` znovu. |
 | `.lock/` (adresář) | `pid` běžícího `hunter.sh` | Neškodné — `acquire_lock()` si adresář sám vytvoří přes `mkdir`. Podrobně o zotavení ze zaseklého zámku viz sekce 9. |
 
 **Praktický důsledek:** smazání jednotlivých souborů ve `state/` nikdy
@@ -249,7 +253,7 @@ předmětu: `HUNTER <token> <příkaz> [argumenty]`.
 | `GET <jméno>` | Konkrétní soubor | ne |
 | `QUALITY HD\|LOW` | Nastaví kvalitu (jen se ukládá, viz sekce 6) | ne |
 | `CONFIRM ON\|OFF` | Potvrzovací odpovědi (SMS kanál) | ne |
-| `WIPE` / `WIPE CONFIRM` | Smaže už odeslané fotky, dávkováno po `WIPE_BATCH` — `WIPE DONE` nebo `WIPE PARTIAL (N zbývá)` | ne |
+| `WIPE` / `WIPE CONFIRM` | Smaže už odeslané fotky, dávkováno po `WIPE_BATCH`. Jedno potvrzení stačí — zbytek se domaže sám při dalších probuzeních, na konci přijde `WIPE DONE` | ne |
 | `CLEAR QUEUE` | Vyprázdní frontu VČETNĚ trvale vadných souborů (nemaže je z karty) | ne |
 | `LIST CMD` | Výpis dostupných příkazů podle `AUTH_TYPE` | ne |
 | `ADD <tel\|mail>` | Přidá oprávněného | **ano** |
@@ -259,9 +263,12 @@ předmětu: `HUNTER <token> <příkaz> [argumenty]`.
 | `AUTH TYPE TOKEN\|SENDER` | Změna režimu autorizace | **ano** |
 | `FOTO` | Nepodporováno (návrhový záměr, ne chybějící implementace) | — |
 
-**`WIPE PARTIAL`** je nové od 2026-09-23 (viz sekce 10) — dřív existovalo
-jen `WIPE DONE`; při velkém `sent_list.txt` teď `WIPE CONFIRM` může
-potřebovat víc než jedno spuštění.
+**Dávkovaný `WIPE`** je nový od 2026-09-23 (viz sekce 10). Při velkém
+`sent_list.txt` odpoví `WIPE CONFIRM` hláškou `WIPE STARTED (N photos,
+M zbyva, pokracuji sam)` a zbytek se domazává **automaticky po jedné
+dávce za probuzení**, vždy až po odeslání fotek. Až je hotovo, přijde
+`WIPE DONE` na adresu toho, kdo si o `WIPE` řekl. Rozdělané mazání drží
+`state/wipe_pending.txt` (viz sekce 5).
 
 ## 8. IMAP transport a tři oddělené složky
 
@@ -340,8 +347,8 @@ dlouho kvůli forkování (`rm`/`printf` na řádek). Riziko: karta plná
 starého odeslaného obsahu = největší `sent_list.txt` = nejpomalejší
 `WIPE` — tedy přesně ve chvíli, kdy je `WIPE` nejvíc potřeba. Opraveno
 2026-09-23 přidáním `WIPE_BATCH` (sekce 6) — `WIPE CONFIRM` teď
-zpracuje nejvýš `WIPE_BATCH` záznamů a nahlásí `WIPE PARTIAL`, pokud
-zbyl zbytek; uživatel pošle příkaz znovu a dokončí ho.
+zpracuje nejvýš `WIPE_BATCH` záznamů za jedno probuzení a zbytek si
+Hunter odbaví sám při dalších, dokud nedomaže všechno.
 
 `list_unsent_snaps`/`day_fully_sent` (hledání kandidátů) jsou naopak
 **cursor-bounded** — `fgrep` proti `sent_list.txt` běží jen na dnech od

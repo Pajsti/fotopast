@@ -337,5 +337,28 @@ fi
 # wait_for_candidates (spec 2026-09-02, 3.3).
 cursor_advance
 
+# Rozdelane mazani (WIPE) - jedna davka za probuzeni, AZ TED: fotky jsou
+# hlavni ucel zarizeni a mazani jim nesmi ujidat rozpocet behu. Kdyz uz
+# na davku neni cas, preskoci se a pokracuje se pri dalsim probuzeni -
+# znacka v state/ zustava, takze se nic neztrati.
+#
+# Preruseni uprostred davky je bezpecne: sent_list.txt se prepisuje az
+# atomickym mv na konci, takze uz smazane soubory se pri dalsim kole jen
+# nenajdou ([ -f ] selze) a vypadnou ze seznamu bez zapocitani.
+# Adresa se cte PRED davkou: posledni davka znacku uklidi, takze potom
+# uz by nebylo komu hlaseni poslat.
+wipe_addr=$(wipe_pending_addr)
+if [ -n "$wipe_addr" ]; then
+    if [ "$(date +%s)" -lt $((RUN_DEADLINE_TS - 30)) ]; then
+        wipe_continue_if_pending
+        if [ -n "$WIPE_DONE_NOTICE" ]; then
+            send_reply_mail "$wipe_addr" "$WIPE_DONE_NOTICE"
+            log "WIPE dokoncen, hlaseni odeslano na $wipe_addr"
+        fi
+    else
+        log "WIPE davka preskocena - do konce behu zbyva min nez 30 s"
+    fi
+fi
+
 log "=== hunter konec ==="
 exit 0

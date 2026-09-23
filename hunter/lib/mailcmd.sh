@@ -124,7 +124,16 @@ process_mail() {
         esac
         log "mail prikaz od $from: $log_cmd"
         CMD_REPLY=""
+        WIPE_CONTINUE=0
         execute_command "$AUTH_CMD" "$AUTH_HAS_TOKEN"
+
+        # Rozdelane mazani: znacku zaklada transport, protoze jen on zna
+        # odesilatele. execute_command da vedet jen priznakem - zustava
+        # tak transportne nezavisly (viz hlavicka lib/command.sh).
+        if [ "$WIPE_CONTINUE" = 1 ]; then
+            wipe_mark_pending "$from"
+            log "WIPE pokracuje pri dalsich probuzenich, hlaseni pujde na $from"
+        fi
 
         if [ "$CONFIRM" = "ON" ] && [ -n "$CMD_REPLY" ]; then
             send_reply_mail "$from" "$CMD_REPLY"

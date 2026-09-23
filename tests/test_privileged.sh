@@ -15,7 +15,7 @@ fixture_snap 260828 210948
 CMD_REPLY=""; execute_command "WIPE CONFIRM" 1
 assert_contains "WIPE CONFIRM vykona" "$CMD_REPLY" "WIPE DONE"
 
-# --- WIPE_BATCH: pri prekroceni stropu se hlasi PARTIAL a zbytek ceka ---
+# --- WIPE_BATCH: pri prekroceni stropu se hlasi STARTED a zbytek ceka ---
 # (2026-09-23: zatezovy test namer il ~100 s na 5000 zaznamech, blizko
 # RUN_DEADLINE - viz tests/stress_5000.sh a komentar u wipe_sent_snaps)
 mkdir -p "$SDCARD/snaps/260829"
@@ -32,7 +32,7 @@ WIPE_BATCH=2
 CMD_REPLY=""; execute_command "WIPE CONFIRM" 1
 assert_eq "WIPE_BATCH=2: smaze jen 2" "$WIPE_COUNT" "2"
 assert_eq "WIPE_BATCH=2: 3 zbyvaji" "$WIPE_REMAINING" "3"
-assert_contains "WIPE_BATCH=2: odpoved je PARTIAL" "$CMD_REPLY" "WIPE PARTIAL"
+assert_contains "WIPE_BATCH=2: odpoved je STARTED" "$CMD_REPLY" "WIPE STARTED"
 assert_contains "WIPE_BATCH=2: odpoved hlasi pocet zbylych" "$CMD_REPLY" "3 zbyva"
 remaining_lines=$(grep -c . "$STATE_DIR/sent_list.txt")
 assert_eq "WIPE_BATCH=2: v sent_list.txt zustaly 3 radky" "$remaining_lines" "3"

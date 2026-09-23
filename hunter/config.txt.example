@@ -122,11 +122,15 @@ REQUEST_MAX=5
 # plati pro prikaz CLEAR QUEUE.
 MAX_QUEUE=100
 
-# Kolik zaznamu maze WIPE CONFIRM za JEDNO spusteni. Zatezovy test
-# (2026-09-23) namer il 98.7 s na 5000 zaznamech na PC - na zarizeni
-# muze byt vyrazne pomalejsi a blizit se RUN_DEADLINE. Pri prekroceni
-# WIPE_BATCH zustane zbytek v sent_list.txt a odpoved je "WIPE PARTIAL"
-# misto "WIPE DONE" - posli WIPE CONFIRM znovu a dokonci zbytek.
+# Kolik zaznamu smaze WIPE za JEDNO probuzeni. Zatezovy test (2026-09-23)
+# namer il 98.7 s na 5000 zaznamech na PC - na zarizeni muze byt vyrazne
+# pomalejsi a blizit se RUN_DEADLINE.
+#
+# Jedno WIPE CONFIRM staci na celou frontu: kdyz se nevejde do jedne
+# davky, odpoved je "WIPE STARTED (... pokracuji sam)" a Hunter si zbytek
+# odbavi sam pri dalsich probuzenich (vzdy AZ PO odeslani fotek). Az
+# domaze uplne vsechno, posle zpravu "WIPE DONE" tomu, kdo si o WIPE
+# rekl. Rozdelane mazani drzi state/wipe_pending.txt.
 WIPE_BATCH=500
 
 # --- Modem / AT port ---
