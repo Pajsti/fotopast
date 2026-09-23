@@ -19,6 +19,31 @@ log() {
     printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG_FILE"
 }
 
+# log_error <zprava>
+# Jako log() navic - kdyz je IMAP_ERROR_FOLDER nastaveny, zkusi zpravu
+# ulozit pres IMAP APPEND i do teto slozky. Nezavisle na SEND_TRANSPORT:
+# chybove hlaseni musi jit i kdyz SEND_TRANSPORT=smtp, protoze prave
+# IMAP muze byt to jedine, co jeste funguje.
+#
+# Bez limitu na pocet - kazdy vyskyt se posila znovu, i kdyz je stejny
+# jako minule (rozhodnuti 2026-09-22). Volajici musi sam hlidat, aby
+# nevolal log_error v souvislosti, ktera by se opakovala kazdou vterinu.
+#
+# Cely IMAP pokus je best-effort a nikdy nesmi shodit volajiciho: kdyz
+# IMAP_ERROR_FOLDER neni nastaveny, IMAP_HOST chybi, nebo mailrecv_run
+# jeste neni definovana (sourcovani mimo poradi, napr. common.sh sam v
+# testu), proste se preskoci - zprava zustane aspon v log.txt.
+log_error() {
+    log "$1"
+    [ -n "$IMAP_ERROR_FOLDER" ] || return 0
+    [ -n "$IMAP_HOST" ] || return 0
+    command -v mailrecv_run >/dev/null 2>&1 || return 0
+    mailrecv_run append "$IMAP_ERROR_FOLDER" \
+        --from "$SMTP_USER" --to "$SMTP_TO" --subject "HUNTER error" \
+        --body "$1" \
+        >> "$LOG_FILE" 2>&1
+}
+
 # rotate_log_if_needed
 # Bez wc/du merime velikost pres `stat -c %s`. Pri prekroceni 1 MB se
 # stary log prepise na log.txt.old (jedna generace zpetne staci - Hunter
@@ -34,31 +59,100 @@ rotate_log_if_needed() {
     fi
 }
 
+# lock_owner_alive <pid>
+# 0, kdyz to cislo opravdu bezi A patri hunter.sh.
+#
+# Nestaci se ptat "zije ten pid?". Zarizeni se pri kazdem probuzeni
+# restartuje a pidy se recykluji od nizkych cisel, takze zaznamenane
+# cislo po restartu skoro jiste patri necemu uplne jinemu.
+#
+# Presne tohle 2026-09-01 zabilo Huntera na dva dny: beh zabity behem
+# restartovaci smycky nechal na karte zamek s pid 235, to cislo po
+# restartu dostal systemovy proces, kill -0 uspelo a kazde dalsi
+# probuzeni jen zapsalo "jina instance uz bezi" a skoncilo. Zadne
+# hlaseni, zadne zotaveni - dva dny nic.
+#
+# Kdyz /proc/<pid>/cmdline nejde precist, nedokazeme rozhodnout a
+# vracime "zije". Radsi pockat jedno probuzeni nez pustit dve instance
+# najednou nad sent_list.txt.
+lock_owner_alive() {
+    # "0" musi ven zvlast: projde testem na cislice, ale "kill -0 0"
+    # miri na vlastni skupinu procesu a VZDY uspeje, pricemz /proc/0
+    # neexistuje - spadlo by to do vetve "neumim rozhodnout" nize a
+    # zamek by drzel navzdy. Zadny proces cislo 0 nema.
+    case "$1" in
+        ''|0|*[!0-9]*) return 1 ;;
+    esac
+
+    # Zamek nesouci nas vlastni pid je vzdycky zbytek po mrtvem
+    # predchudci: dva procesy tentyz pid zaroven drzet nemuzou. Bez
+    # tehle pojistky by na zarizeni kill -0 i cmdline odpovedely
+    # "zije hunter.sh" - protoze by se ptaly na nas.
+    [ "$1" = "$$" ] && return 1
+
+    kill -0 "$1" 2>/dev/null || return 1
+    [ -r "/proc/$1/cmdline" ] || return 0
+    grep -q hunter.sh "/proc/$1/cmdline" 2>/dev/null
+}
+
 # acquire_lock
-# Zamek pres mkdir (atomicka operace i na FAT/exFAT). Kdyz adresar zamku
-# existuje po vypadku napajeni z minuleho behu, PID v nem uz nebezi
-# (kazdy boot ma nova PID) - takovy zamek se bezpecne prevezme.
+# Zamek pres mkdir (atomicka operace i na FAT/exFAT).
+#
+# Cisty konec i odchytitelny signal zamek uvolni pres cleanup() v
+# hunter.sh. Co po sobe zamek necha, je SIGKILL nebo vypadek napajeni -
+# a takovy zbytek se musi dat prevzit, jinak Hunter umlkne napord.
+# Rozhoduje o tom lock_owner_alive, ne pouhe kill -0.
 acquire_lock() {
     lockdir="$STATE_DIR/.lock"
     if mkdir "$lockdir" 2>/dev/null; then
         echo $$ > "$lockdir/pid" 2>/dev/null
         return 0
     fi
-    if [ -f "$lockdir/pid" ]; then
-        oldpid=$(cat "$lockdir/pid" 2>/dev/null)
-        if [ -n "$oldpid" ] && ! kill -0 "$oldpid" 2>/dev/null; then
-            rm -rf "$lockdir" 2>/dev/null
-            if mkdir "$lockdir" 2>/dev/null; then
-                echo $$ > "$lockdir/pid" 2>/dev/null
-                return 0
-            fi
-        fi
+
+    # Zamek uz existuje. Chybejici, prazdny nebo posahany soubor pid
+    # spadne v lock_owner_alive do "nezije" - drive na nej neexistovala
+    # zadna cesta k zotaveni a zamek by drzel navzdy.
+    oldpid=$(cat "$lockdir/pid" 2>/dev/null)
+    lock_owner_alive "$oldpid" && return 1
+
+    rm -rf "$lockdir" 2>/dev/null
+    if mkdir "$lockdir" 2>/dev/null; then
+        echo $$ > "$lockdir/pid" 2>/dev/null
+        # Az tady, aby log netvrdil prevzeti, ktere se nepovedlo.
+        log "prevzat zastaraly zamek po pidu ${oldpid:-<prazdny>}"
+        return 0
     fi
     return 1
 }
 
 release_lock() {
     rm -rf "$STATE_DIR/.lock" 2>/dev/null
+}
+
+# deadline_kill_tools
+# Posle SIGTERM vsem sitovym nastrojum, ktere jeste bezi.
+#
+# Proc to existuje: kdyz hlavni beh visi v prikazove substituci - treba
+# na "listing=$(mailrecv_run list unseen)" pri zaseklem spojeni - SIGTERM
+# poslany SAMOTNEMU shellu se jen ODLOZI. POSIX shell zpracuje trap az
+# potom, co dite skonci. Nasledny SIGKILL uz cleanup obejde uplne:
+# ubia_first zustane zmrazena a zamek lezet na karte.
+#
+# 2026-09-06 takhle skoncilo 18 behu za sebou. Zabitim ditete se shell
+# odblokuje, trap probehne normalne a cleanup uklidi.
+#
+# Nastroje se hledaji pres pidof - shodny postup jako u ubia_first. Dve
+# instance hunter.sh zaroven nehrozi, o to se stara zamek, takze cizi
+# proces tu zabit nemuzeme.
+deadline_kill_tools() {
+    for _t in mailrecv mailsend atcmd smssend smsrecv; do
+        _p=$(pidof "$_t" 2>/dev/null)
+        # Zamerne bez uvozovek: pidof vraci PID oddelene mezerou a
+        # chceme poslat signal vsem. Vystup pidof se zamerne nevaliduje -
+        # stejna duvera jako u ubia_first v hunter.sh.
+        [ -n "$_p" ] && kill -TERM $_p 2>/dev/null
+    done
+    return 0
 }
 
 # trim <retezec>
@@ -112,6 +206,13 @@ atomic_write_file() {
 # Prepise (nebo prida) KLIC=HODNOTA v config.txt, ostatni radky beze
 # zmeny. Atomicky pres docasny soubor. `case` pattern matching resi
 # "najdi radek zacinajici na KLIC=" bez sed.
+#
+# POZOR - DUVERNI HRANICE: config.txt nacita load_config pres `.`, takze
+# argument HODNOTA se pri pristim behu VYHODNOTI JAKO SHELL. Kdo sem
+# pousti text od uzivatele (ADD/REMOVE v lib/command.sh), musi ho nejdriv
+# profiltrovat znakovym seznamem povolenych znaku - jinak je to spusteni
+# libovolneho prikazu, nebo (u nesparovane uvozovky) trvale rozbity
+# config, ktery uz nikdy nepujde nacist.
 set_config_value() {
     key="$1"
     val="$2"
@@ -140,13 +241,186 @@ set_config_value() {
     sync
 }
 
+# snap_num6 <retezec>
+# 0, kdyz je vstup presne 6 cislic. Pouziva se na overeni YYMMDD i
+# HHMMSS - obe casti cesty ke snimku, a taky nazvy slozek dnu.
+# Sestimistne cislo (max 999999) se vejde do 32bitove aritmetiky, takze
+# se pak da porovnavat pres -gt/-lt.
+snap_num6() {
+    case "$1" in [0-9][0-9][0-9][0-9][0-9][0-9]) return 0 ;; esac
+    return 1
+}
+
+# list_snap_days
+# Vypise nazvy slozek dnu v snaps/ (jen jmeno, ne cesta), jeden na
+# radek. Pouziva se glob, ne find - glob je serazeny lexikograficky, coz
+# je u YYMMDD zaroven chronologicky, a nestoji ani jeden fork.
+# Nazvy dnu neobsahuji mezery, takze u volajiciho staci bezne deleni
+# slov, zadne hratky s IFS.
+list_snap_days() {
+    for _lsd in "$SDCARD"/snaps/*/; do
+        [ -d "$_lsd" ] || continue
+        _lsd=${_lsd%/}
+        printf '%s\n' "${_lsd##*/}"
+    done
+}
+
+# cursor_read
+# Vypise den (YYMMDD), od ktereho ma automatika hledat kandidaty.
+#
+# Chybejici, prazdny nebo poskozeny state/cursor.txt znamena "od
+# nejstarsiho dne na karte" - tedy presne dnesni chovani. Diky tomu
+# nepotrebuje zive nasazeni zadny rucni migracni krok (spec 2026-09-02,
+# sekce 3.4).
+#
+# Cursor se nikdy neposune pres nejnovejsi slozku dne na karte (spec
+# 2026-09-02) - hodnota novejsi nez nejnovejsi den je proto nemozny stav,
+# stejne neduveryhodny jako poskozeny soubor, a resi se identicky: NEklampuje
+# se na nejnovejsi den (to by tise preskocilo vsechny dny mezi skutecnou
+# pozici a nejnovejsim), ale spadne az na nejstarsi den. Jednorazovy plny
+# rescan je levny a sent_list.txt porad dedupuje, takze nehrozi duplicitni
+# odeslani.
+cursor_read() {
+    _cur=""
+    if [ -f "$STATE_DIR/cursor.txt" ]; then
+        read -r _cur < "$STATE_DIR/cursor.txt" 2>/dev/null
+    fi
+    snap_num6 "$_cur" || _cur=""
+
+    _oldest=""
+    _newest=""
+    for _d in $(list_snap_days); do
+        snap_num6 "$_d" || continue
+        if [ -z "$_oldest" ] || [ "$_d" -lt "$_oldest" ]; then
+            _oldest="$_d"
+        fi
+        if [ -z "$_newest" ] || [ "$_d" -gt "$_newest" ]; then
+            _newest="$_d"
+        fi
+    done
+
+    if [ -n "$_cur" ] && [ -n "$_newest" ] && [ "$_cur" -gt "$_newest" ]; then
+        _cur=""
+    fi
+    [ -z "$_cur" ] && _cur="$_oldest"
+
+    printf '%s' "$_cur"
+}
+
+# cursor_write <YYMMDD>
+# Atomicky pres atomic_write_file (viz vyse) - torn write by jinak mohl
+# nechat cursor.txt s useknutym, neplatnym obsahem. Neni to bezpecnostne
+# nosne (cursor_read poskozeny i chybejici soubor resi stejne - rescan od
+# nejstarsiho dne, sent_list.txt porad dedupuje), ale nema smysl tu byt
+# jedinym primym zapisem v souboru, kde uz atomic_write_file existuje.
+cursor_write() {
+    atomic_write_file "$STATE_DIR/cursor.txt" "$1
+"
+}
+
+# skip_snaps <seznam cest, radek na soubor>
+# Oznaci fotky za vyrizene, aniz by se odesilaly - zapisem do
+# sent_list.txt. Vypise pocet skutecne preskocenych.
+#
+# Vyzadane fotky (REQUESTED_SNAPS) VYNECHAVA, a to je bezpecnostne
+# nosne: vyzadane se do sent_list.txt zamerne nezapisuji nikdy (viz
+# hunter.sh), protoze jinak by se prvnim vyzadanim oznacily za odeslane
+# a uz NIKDY by neodesly automaticky. Kdyby se tam dostaly tudy,
+# obesla by se ta ochrana zadem - tise a natrvalo
+# (spec 2026-09-02, invariant 7.1).
+skip_snaps() {
+    _cnt=0
+    _nl='
+'
+    _old_ifs="$IFS"
+    IFS="$_nl"
+    for _s in $1; do
+        IFS="$_old_ifs"
+        [ -n "$_s" ] || { IFS="$_nl"; continue; }
+        case "$_nl$REQUESTED_SNAPS$_nl" in
+            *"$_nl$_s$_nl"*) IFS="$_nl"; continue ;;
+        esac
+        printf '%s\n' "$_s" >> "$STATE_DIR/sent_list.txt"
+        _cnt=$((_cnt + 1))
+        IFS="$_nl"
+    done
+    IFS="$_old_ifs"
+    sync
+    printf '%s' "$_cnt"
+}
+
+# validate_transport
+# Uklidi SEND_TRANSPORT a IMAP_SAVE_FOLDER na hodnoty, se kterymi se da
+# pracovat. Je to samostatna funkce, aby sla testovat bez cteni configu.
+#
+# Vsechny opravy padaji na "smtp", protoze to je dosavadni chovani -
+# spatna konfigurace tedy nikdy nezhorsi to, co uz bezi.
+validate_transport() {
+    case "$SEND_TRANSPORT" in
+        smtp|imap|smtp-imap|imap-smtp|smtp+imap) ;;
+        *)
+            log "SEND_TRANSPORT neznama hodnota, pouzivam smtp"
+            SEND_TRANSPORT=smtp
+            ;;
+    esac
+
+    # Rezim s IMAPem bez IMAP_HOST by tise selhal pri kazdem odeslani -
+    # mailrecv by nemel kam se pripojit. Radsi zpatky na smtp.
+    case "$SEND_TRANSPORT" in
+        *imap*)
+            if [ -z "$IMAP_HOST" ]; then
+                log "SEND_TRANSPORT chce IMAP, ale IMAP_HOST je prazdny - pouzivam smtp"
+                SEND_TRANSPORT=smtp
+            fi
+            ;;
+    esac
+
+    [ -n "$IMAP_SAVE_FOLDER" ] || IMAP_SAVE_FOLDER=Fotopast
+
+    # INBOX je zakazany: prikazy se hledaji pres SEARCH UNSEEN prave
+    # tam, takze by si Hunter vlastni ulozene fotky precetl jako
+    # prichozi prikazy. Porovnava se bez ohledu na velikost pismen,
+    # protoze IMAP nazev INBOX case-insensitive je.
+    _isf_low=$(printf '%s' "$IMAP_SAVE_FOLDER" | tr 'A-Z' 'a-z')
+    if [ "$_isf_low" = "inbox" ]; then
+        log "IMAP_SAVE_FOLDER nesmi byt INBOX - pouzivam Fotopast"
+        IMAP_SAVE_FOLDER=Fotopast
+    fi
+
+    # Odpovedi na prikazy muzou jit do jine slozky nez fotky. Prazdne
+    # nastaveni znamena "stejna slozka jako fotky" - dosavadni chovani
+    # pro karty, ktere IMAP_REPLY_FOLDER vubec nemaji nastavene. Fallback
+    # az TADY, po uklidu IMAP_SAVE_FOLDER vyse, aby se do nej nemohl
+    # propsat neopraveny INBOX.
+    [ -n "$IMAP_REPLY_FOLDER" ] || IMAP_REPLY_FOLDER="$IMAP_SAVE_FOLDER"
+
+    _irf_low=$(printf '%s' "$IMAP_REPLY_FOLDER" | tr 'A-Z' 'a-z')
+    if [ "$_irf_low" = "inbox" ]; then
+        log "IMAP_REPLY_FOLDER nesmi byt INBOX - pouzivam $IMAP_SAVE_FOLDER"
+        IMAP_REPLY_FOLDER="$IMAP_SAVE_FOLDER"
+    fi
+
+    # IMAP_ERROR_FOLDER je na rozdil od predchozich dvou VYPNUTY, kdyz je
+    # prazdny - zadny fallback na Fotopast, protoze chybova hlaseni
+    # nejsou pozadovana vychozi funkce (viz log_error nize). INBOX se
+    # tu neopravuje na nahradni slozku, proste se funkce vypne - neni
+    # kam bezpecne spadnout, kdyz uzivatel omylem napsal INBOX.
+    if [ -n "$IMAP_ERROR_FOLDER" ]; then
+        _ief_low=$(printf '%s' "$IMAP_ERROR_FOLDER" | tr 'A-Z' 'a-z')
+        if [ "$_ief_low" = "inbox" ]; then
+            log "IMAP_ERROR_FOLDER nesmi byt INBOX - chybova hlaseni pres IMAP vypinam"
+            IMAP_ERROR_FOLDER=""
+        fi
+    fi
+}
+
 # load_config
 # config.txt je platny POSIX shell (KLIC=HODNOTA, komentare #), takze se
 # naimportuje primo pres `.` - zadny vlastni parser netreba. Vyplni
 # chybejici nepovinne klice vychozimi hodnotami.
 load_config() {
     if [ ! -f "$CONFIG_FILE" ]; then
-        log "CHYBA: chybi $CONFIG_FILE, koncim"
+        log_error "CHYBA: chybi $CONFIG_FILE, koncim"
         exit 1
     fi
     . "$CONFIG_FILE"
@@ -159,11 +433,81 @@ load_config() {
     : "${SNAP_WAIT:=25}"
     : "${MAX_SEND_PER_WAKE:=3}"
     : "${RUN_DEADLINE:=180}"
+    # Vlastni rozpocet pro kontrolu posty. Bez nej muze zaseknuty
+    # mailrecv sezrat cely RUN_DEADLINE a na odesilani fotek uz nedojde -
+    # process_mail bezi PRED nim (viz hunter.sh). Rozbor 195 behu z karty
+    # 2026-09-23: 121 ze 132 nedokoncenych behu umrelo jeste pred
+    # zmrazenim aplikace, 46 z nich presne na RUN_DEADLINE.
+    : "${MAIL_DEADLINE:=45}"
+    case "$MAIL_DEADLINE" in
+        ''|*[!0-9]*|0*) MAIL_DEADLINE=45 ;;
+    esac
+    # Rozpocet vetsi nez cely beh by pojistku zrusil - pak by zaseknuta
+    # posta zase drzela beh az do RUN_DEADLINE, presne jak to delala
+    # predtim.
+    [ "$MAIL_DEADLINE" -ge "$RUN_DEADLINE" ] && MAIL_DEADLINE=$((RUN_DEADLINE / 4))
+    : "${AUTH_TYPE:=TOKEN}"
+    : "${MAIL_MASTERS:=}"
+    : "${REQUEST_MAX:=5}"
+    # Strop na velikost nedodelku. Pres nej se NEJSTARSI cekajici fotky
+    # preskoci (zapisem do sent_list.txt), aby se dohaneni nenafouklo
+    # donekonecna. 0 = bez omezeni.
+    : "${MAX_QUEUE:=100}"
+    # Rucne psana hodnota na zive karte (CHECKLIST faze 9) je nachylna k
+    # preklepu ("1OO" misto "100") - bez pojistky by "[ "$MAX_QUEUE" -gt
+    # 0 ]" v hunter.sh skoncilo shellovou chybou na nesledovany stderr a
+    # strop by tise prestal platit. Vedouci nula (napr. "010") je navic
+    # dvojznacna: "[ ]" ji porovna jako desitkovou 10, ale "$(( ))" o par
+    # radku niz v hunter.sh ji precte jako osmickovou 8 - proto se tu
+    # odmita taky, osamocena "0" (bez omezeni) zustava platna. Stejny
+    # styl kontroly jako jinde v konfiguraci (viz status.sh, dev-stop.sh).
+    case "$MAX_QUEUE" in
+        ''|*[!0-9]*|0?*) MAX_QUEUE=100 ;;
+    esac
+    # Kolik zaznamu smaze WIPE CONFIRM za jedno spusteni (command.sh,
+    # wipe_sent_snaps) - viz komentar tamtez, proc davkovani vubec
+    # existuje. Stejna pojistka na spatny vstup jako u MAX_QUEUE vyse.
+    : "${WIPE_BATCH:=500}"
+    # Na rozdil od MAX_QUEUE tu osamocena "0" NENI "bez omezeni" - cely
+    # smysl davkovani je bezpecny strop, takze "0*" (vc. holeho "0")
+    # padne na vychozi hodnotu stejne jako preklep nebo prazdny vstup.
+    case "$WIPE_BATCH" in
+        ''|*[!0-9]*|0*) WIPE_BATCH=500 ;;
+    esac
+    # Kudy odchazi fotky a odpovedi na prikazy. Prijem prikazu tim
+    # dotcen NENI - ten jde pres IMAP vzdycky.
+    #   smtp       jen mailem (vychozi, dosavadni chovani)
+    #   imap       jen ulozit pres IMAP APPEND do slozky
+    #   smtp-imap  mailem; kdyz SMTP selze, ulozit do slozky
+    #   imap-smtp  do slozky; kdyz IMAP selze, poslat mailem
+    #   smtp+imap  oboji vzdy, dve kopie
+    : "${SEND_TRANSPORT:=smtp}"
+    : "${IMAP_SAVE_FOLDER:=Fotopast}"
+    : "${IMAP_REPLY_FOLDER:=}"
+    : "${IMAP_ERROR_FOLDER:=}"
+    validate_transport
+    : "${IMAP_PORT:=993}"
+    : "${TOKEN_FILE:=$HUNTER_DIR/mail.token}"
+    # CA svazek pro overeni certifikatu SMTP/IMAP serveru. PRAZDNY je
+    # vychozi stav: bez nej je spojeni sifrovane, ale identita serveru se
+    # neoveruje (mailsend/mailrecv na to samy varuji na stderr). Kdyz je
+    # nastaveny, preda se obema klientum jako --ca. Zamerne se nevynucuje,
+    # aby uz bezici instalace bez CA svazku na karte fungovaly dal.
+    : "${CA_FILE:=}"
+
+    # Vyzadane fotky jdou v davce prvni; kdyby byl strop nizsi nez
+    # REQUEST_MAX, vytlacily by automaticke kandidaty a cast vyzadanych by
+    # se ztratila (REQUESTED_SNAPS se mezi probuzenimi neuchovava) - a to
+    # tise, protoze odpoved uzivateli uz rekla "SENDING N". Pravidlo je
+    # popsane v config.txt.example i v CHECKLISTu; tady se opravdu
+    # vynucuje, at uz ho porusi vychozi hodnoty nebo rucne editovany
+    # config.
+    [ "$MAX_SEND_PER_WAKE" -lt "$REQUEST_MAX" ] && MAX_SEND_PER_WAKE="$REQUEST_MAX"
 
     for req in SMTP_HOST SMTP_PORT SMTP_USER SMTP_TO AT_PORT; do
         eval "val=\${$req:-}"
         if [ -z "$val" ]; then
-            log "CHYBA: $req neni nastaveno v $CONFIG_FILE, koncim"
+            log_error "CHYBA: $req neni nastaveno v $CONFIG_FILE, koncim"
             exit 1
         fi
     done
@@ -262,6 +606,10 @@ sync_clock_from_modem() {
 # pattern "*,cislo,*" nezachytil castecnou shodu (napr. "420" uvnitr
 # "1420999").
 is_master() {
+    # Prazdny vstup nesmi nikdy projit: se zapraznenym MASTERS by se
+    # obaleny retezec ",," porovnaval se vzorem *",,"* a sedl by. Stejna
+    # pojistka jako u dvojcete is_mail_master (viz lib/command.sh).
+    [ -n "$1" ] || return 1
     case ",$MASTERS," in
         *",$1,"*) return 0 ;;
         *) return 1 ;;
@@ -281,6 +629,79 @@ add_master() {
     else
         newval="$MASTERS,$num"
     fi
+    set_config_value MASTERS "$newval"
+    MASTERS="$newval"
+}
+
+# add_mail_master <adresa> / remove_mail_master <adresa>
+# MAIL_MASTERS je seznam oddeleny carkami, stejne jako MASTERS.
+add_mail_master() {
+    a=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
+    if is_mail_master "$a"; then
+        return 0
+    fi
+    if [ -z "$MAIL_MASTERS" ]; then
+        newval="$a"
+    else
+        newval="$MAIL_MASTERS,$a"
+    fi
+    set_config_value MAIL_MASTERS "$newval"
+    MAIL_MASTERS="$newval"
+}
+
+# remove_mail_master <adresa> -> REMOVE_MAIL_RESULT = OK|NOT_FOUND|LAST
+#
+# POSLEDNI adresu odebrat NELZE: se zapraznenym MAIL_MASTERS neprojde
+# autorizaci nikdo (is_mail_master vrati 1 pro cokoli) a to v OBOU
+# rezimech - jedinou cestou zpet by byl fyzicky pristup ke karte. Je to
+# stejny duvod, pro ktery uz existuje pojistka u posledniho tokenu
+# (remove_token v lib/command.sh), tady je dopad dokonce vetsi: ztrata
+# posledniho tokenu nechava aspon rezim SENDER, ztrata posledni adresy
+# nenechava zadnou cestu zpet.
+#
+# NOT_FOUND se hlasi zvlast, aby "odebral jsem neco jineho, nez jsem
+# myslel" nevypadalo jako uspech - drive funkce hlasila REMOVED i kdyz
+# zadna adresa neodpovidala.
+remove_mail_master() {
+    a=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
+    newval=""
+    rm_found=0
+    old_ifs="$IFS"
+    IFS=','
+    for m in $MAIL_MASTERS; do
+        [ -z "$m" ] && continue
+        rm_ml=$(printf '%s' "$m" | tr 'A-Z' 'a-z')
+        if [ "$rm_ml" = "$a" ]; then rm_found=1; continue; fi
+        if [ -z "$newval" ]; then newval="$m"; else newval="$newval,$m"; fi
+    done
+    IFS="$old_ifs"
+
+    if [ "$rm_found" = 0 ]; then
+        REMOVE_MAIL_RESULT=NOT_FOUND
+        return 1
+    fi
+    if [ -z "$newval" ]; then
+        REMOVE_MAIL_RESULT=LAST
+        return 1
+    fi
+
+    set_config_value MAIL_MASTERS "$newval"
+    MAIL_MASTERS="$newval"
+    REMOVE_MAIL_RESULT=OK
+    return 0
+}
+
+# remove_master <cislo> - totez pro telefonni cisla
+remove_master() {
+    newval=""
+    old_ifs="$IFS"
+    IFS=','
+    for m in $MASTERS; do
+        [ "$m" = "$1" ] && continue
+        [ -z "$m" ] && continue
+        if [ -z "$newval" ]; then newval="$m"; else newval="$newval,$m"; fi
+    done
+    IFS="$old_ifs"
     set_config_value MASTERS "$newval"
     MASTERS="$newval"
 }

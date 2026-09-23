@@ -167,11 +167,15 @@ build_status_body() {
 }
 
 # build_status_reply
-# Kompaktni jednoradkova varianta pro SMS odpoved na STATUS (SMS ma
-# limit ~160 znaku).
+# Kompaktni jednoradkova varianta pro odpoved na STATUS.
+#
+# FRONTA je pocet cekajicich kandidatu po uplatneni cursoru - presne to
+# cislo, podle ktereho se uzivatel rozhoduje, jestli poslat CLEAR QUEUE
+# (spec 2026-09-02, sekce 10).
 build_status_reply() {
     bat=$(get_battery_percent)
     sig=$(get_signal_percent)
     spc=$(get_space_gb)
-    printf 'BAT:%s SIG:%s SPACE:%s' "$bat" "$sig" "$spc"
+    queue=$(find_ready_candidates | grep -c .)
+    printf 'BAT:%s SIG:%s SPACE:%s FRONTA:%s' "$bat" "$sig" "$spc" "$queue"
 }

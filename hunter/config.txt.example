@@ -33,6 +33,106 @@ SMTP_TLS=starttls
 #   echo 'tve-aplikacni-heslo' > /tmp/mnt/sdcard/hunter/smtp.pass
 # Gmail i Seznam vyzaduji APLIKACNI heslo, ne heslo do uctu.
 
+# Tokeny jsou v hunter/mail.token, jeden na radek (viceradkovy soubor -
+# kazdy clovek muze mit vlastni). Vytvor takto na zarizeni:
+#   echo 'nejakytajnytoken' > /tmp/mnt/sdcard/hunter/mail.token
+
+# --- IMAP (prikazovy kanal) ---
+# Prihlasovaci jmeno a heslo se sdili s odesilanim (SMTP_USER,
+# smtp.pass) - je to tentyz ucet.
+IMAP_HOST=imap.seznam.cz
+IMAP_PORT=993
+
+# CA svazek pro overeni certifikatu SMTP i IMAP serveru. Kdyz je prazdny
+# (nebo klic uplne chybi), je spojeni sifrovane, ale identita serveru se
+# NEOVERUJE - kdokoli v pozici man-in-the-middle (podvrzeny 4G vysilac,
+# nepratelsky upstream) muze precist heslo do schranky i token, ktery se
+# veze v predmetu prikazoveho mailu. Pro ostry provoz zkopiruj svazek na
+# kartu a odkomentuj:
+#CA_FILE=/tmp/mnt/sdcard/hunter/ca-certificates.crt
+# POZOR: podpora --ca v mailrecv je novejsi nez binarky, ktere uz mohou
+# byt na karte. Nez tenhle klic nastavis, over, ze bin/mailrecv je z
+# aktualniho prekladu (starsi build vezme "--ca" jako nazev prikazu,
+# skonci s kodem 3 a prikazovy kanal tise prestane fungovat):
+#   hunter/bin/mailrecv 2>&1 | grep -q -- --ca && echo OK || echo STARY
+
+# --- Kudy odchazi fotky a odpovedi ---
+# Prijem prikazu tim dotcen NENI - ten jde pres IMAP vzdycky.
+#
+#   smtp       jen mailem (vychozi, dosavadni chovani)
+#   imap       jen ulozit pres IMAP APPEND do slozky nize
+#   smtp-imap  mailem; kdyz SMTP selze, ulozit do slozky
+#   imap-smtp  do slozky; kdyz IMAP selze, poslat mailem
+#   smtp+imap  oboji vzdy, dve kopie
+#
+# Proc to existuje: odesilani SMTP primo z mobilni SIM vypada pro
+# operatora jako spam bot a O2 kvuli tomu jednou zablokovalo celou SIM
+# (data i volani). IMAP APPEND je totez spojeni na 993, jake zarizeni
+# stejne dela kvuli prikazum - operator nema co chytit.
+SEND_TRANSPORT=smtp
+
+# Slozka na tomtez uctu, kam se uklada pres IMAP APPEND fotka. Zaklada
+# se sama, kdyz neexistuje.
+#
+# NESMI byt INBOX: prikazy se hledaji pres SEARCH UNSEEN prave tam,
+# takze by si Hunter vlastni ulozene fotky precetl jako prichozi
+# prikazy. Kdyz sem INBOX napises, kod ho odmitne a pouzije Fotopast.
+IMAP_SAVE_FOLDER=Fotopast
+
+# Slozka, kam se pres IMAP APPEND uklada ODPOVED na prikaz (STATUS,
+# LAST, ...) - nezavisle od IMAP_SAVE_FOLDER vyse. Prazdne = stejna
+# slozka jako fotky (dosavadni chovani). Stejny zakaz INBOX plati i
+# tady - pri poruseni se pouzije IMAP_SAVE_FOLDER.
+IMAP_REPLY_FOLDER=
+
+# Slozka, kam se pres IMAP APPEND uklada hlaseni CHYBY (chybejici
+# config, chybejici povinny klic, selhani odeslani fotky). Prazdne
+# (vychozi) = VYPNUTO, nic se neposila, chyby zustavaji jen v log.txt.
+# Nezavisle na SEND_TRANSPORT - jde vzdy pres IMAP, protoze IMAP muze
+# byt to jedine, co jeste funguje. Posila se KAZDY vyskyt, bez limitu -
+# pri trvale rozbite veci pocitej s opakovanymi zpravami. INBOX se
+# odmita jako u predchozich dvou, ale bez nahrady - funkce se proste
+# vypne.
+IMAP_ERROR_FOLDER=
+
+# Autorizovane e-mailove adresy pro prikazy, oddelene carkami.
+# Piste malymi pismeny.
+MAIL_MASTERS=paja.stindl@seznam.cz
+
+# TOKEN  = predmet musi nest platny token A odesilatel musi byt
+#          v MAIL_MASTERS  (vychozi, doporucene)
+# SENDER = staci odesilatel v MAIL_MASTERS
+# POZOR: hlavicku From lze trivialne podvrhnout, takze v rezimu SENDER
+# je i WIPE dosazitelny pro kohokoli, kdo zna dve adresy. Prikazy menici
+# opravneni (AUTH TYPE, ADD, REMOVE, ADD TOKEN, REMOVE TOKEN) vyzaduji
+# token VZDY, i v rezimu SENDER.
+AUTH_TYPE=TOKEN
+
+# Strop poctu fotek na jedno VYZADANI (LAST/DATE/GET). Oddeleny od
+# MAX_SEND_PER_WAKE, protoze o vyzadane fotky si uzivatel rekl vyslovne.
+REQUEST_MAX=5
+
+# Strop na velikost nedodelku (kolik cekajicich fotek ma vubec smysl
+# drzet). Co je pres strop, to se NEJSTARSI preskoci - soubory na karte
+# zustanou, jen uz se nenabizeji k odeslani. 0 = bez omezeni.
+#
+# POZOR: preskocene fotky se zapisuji do state/sent_list.txt, takze je
+# pozdejsi WIPE CONFIRM smaze, i kdyz ti nikdy nedorazily mailem.
+# Vedome rozhodnuti (2026-09-02) ve prospech jednoduchosti - stejne to
+# plati pro prikaz CLEAR QUEUE.
+MAX_QUEUE=100
+
+# Kolik zaznamu smaze WIPE za JEDNO probuzeni. Zatezovy test (2026-09-23)
+# namer il 98.7 s na 5000 zaznamech na PC - na zarizeni muze byt vyrazne
+# pomalejsi a blizit se RUN_DEADLINE.
+#
+# Jedno WIPE CONFIRM staci na celou frontu: kdyz se nevejde do jedne
+# davky, odpoved je "WIPE STARTED (... pokracuji sam)" a Hunter si zbytek
+# odbavi sam pri dalsich probuzenich (vzdy AZ PO odeslani fotek). Az
+# domaze uplne vsechno, posle zpravu "WIPE DONE" tomu, kdo si o WIPE
+# rekl. Rozdelane mazani drzi state/wipe_pending.txt.
+WIPE_BATCH=500
+
 # --- Modem / AT port ---
 # ttyUSB2 je hypoteza z rozboru firmwaru: ubia_first drzi ttyUSB0 a
 # ttyUSB1, ttyUSB2 by mel byt volny. NEOVERENO NA ZARIZENI - viz spec
@@ -47,9 +147,24 @@ AT_BAUD=115200
 SNAP_WAIT=25
 
 # Kolik fotografii nejvyse odeslat za jedno probuzeni (ochrana baterie
-# pri velkem nedodelku).
-MAX_SEND_PER_WAKE=3
+# pri velkem nedodelku). Musi byt aspon tak velke jako REQUEST_MAX -
+# vyzadane fotky (LAST/DATE/GET) jsou v odesilaci davce prvni, takze by
+# jinak vytlacily automaticky nalezene kandidaty. load_config si to
+# pohlida: nizsi hodnota se pri nacteni tise zvedne na REQUEST_MAX.
+MAX_SEND_PER_WAKE=8
 
 # Tvrdy strop celeho behu hunter.sh. Po vyprseni se beh bezpodminecne
 # uklidi a ukonci, i kdyby nic neodeslal.
 RUN_DEADLINE=180
+
+# Vlastni, mnohem mensi strop JEN pro kontrolu posty (prichozi prikazy).
+# Musi byt vyrazne pod RUN_DEADLINE - kdyz je vetsi nebo roven, kod ho
+# tise srazi na ctvrtinu RUN_DEADLINE.
+#
+# Proc to existuje: process_mail bezi PRED odesilanim fotek, takze
+# zaseknuty mailrecv neznamena "neprisly prikazy", ale "neodesle se nic".
+# Rozbor 195 behu z karty (2026-09-23): 121 ze 132 nedokoncenych behu
+# umrelo jeste pred zmrazenim aplikace, 46 presne na RUN_DEADLINE. Fotky
+# chodily hlavne po studenem startu, kdy jeste nebezela 4G a mailrecv
+# skoncil hned na DNS.
+MAIL_DEADLINE=45

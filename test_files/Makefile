@@ -22,11 +22,13 @@ CFLAGS  = -O2 -Wall -Wextra -std=gnu99 -static -mfp32
 LDFLAGS = -static
 
 AT_TOOLS   = atcmd smssend smsrecv
-MAIL_TOOLS = mailsend
+MAIL_TOOLS = mailsend mailrecv
 UTIL_TOOLS = snapready logscan
 ALL_TOOLS  = $(AT_TOOLS) $(MAIL_TOOLS) $(UTIL_TOOLS)
 
-.PHONY: all at mail util clean strip
+HOSTCC  ?= cc
+
+.PHONY: all at mail util clean strip hosttest
 
 all: $(ALL_TOOLS)
 
@@ -57,10 +59,22 @@ smssend: smssend.o atport.o
 smsrecv: smsrecv.o atport.o
 	$(CC) $(LDFLAGS) -o $@ $^
 
-mailsend: mailsend.c
+tlsnet.o: tlsnet.c tlsnet.h
+	$(CC) $(CFLAGS) -I"$(MBEDTLS)/include" -c -o $@ $<
+
+mimemsg.o: mimemsg.c mimemsg.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+mailsend: mailsend.c tlsnet.o mimemsg.o
 	@test -d "$(MBEDTLS)/include" || \
 	  { echo "chybi mbedTLS v $(MBEDTLS) - spust nejdriv ./build.sh"; exit 1; }
-	$(CC) $(CFLAGS) -I"$(MBEDTLS)/include" -o $@ mailsend.c \
+	$(CC) $(CFLAGS) -I"$(MBEDTLS)/include" -o $@ mailsend.c tlsnet.o mimemsg.o \
+	  -L"$(MBEDTLS)/lib" -lmbedtls -lmbedx509 -lmbedcrypto $(LDFLAGS)
+
+mailrecv: mailrecv.c tlsnet.o mimemsg.o
+	@test -d "$(MBEDTLS)/include" || \
+	  { echo "chybi mbedTLS v $(MBEDTLS) - spust nejdriv ./build.sh"; exit 1; }
+	$(CC) $(CFLAGS) -I"$(MBEDTLS)/include" -o $@ mailrecv.c tlsnet.o mimemsg.o \
 	  -L"$(MBEDTLS)/lib" -lmbedtls -lmbedx509 -lmbedcrypto $(LDFLAGS)
 
 snapready: snapready.c
@@ -72,5 +86,12 @@ logscan: logscan.c
 strip: $(ALL_TOOLS)
 	$(STRIP) $(ALL_TOOLS)
 
+# Nativni test generatoru zpravy. mimemsg.c zamerne nezavisi na tlsnet
+# ani na mbedTLS, takze se da prelozit pro hostitele a otestovat.
+hosttest: mimemsg.c mimemsg.h mimemsg_test.c
+	$(HOSTCC) -O2 -Wall -Wextra -std=gnu99 -o mimemsg_test \
+	  mimemsg_test.c mimemsg.c
+	./mimemsg_test
+
 clean:
-	rm -f *.o $(ALL_TOOLS)
+	rm -f *.o $(ALL_TOOLS) mimemsg_test
