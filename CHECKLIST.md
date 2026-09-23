@@ -7,6 +7,10 @@ razítkem). Telnet se nepoužívá.
 Odškrtávej postupně, nepřeskakuj. Kroky 5 a 6 jsou nevratné/rizikové —
 tam je u každého napsáno, co dělat, když to nedopadne.
 
+Souhrnná referenční dokumentace (architektura, kompletní seznam
+souborů/configu/příkazů, chování při chybách, obnova po nehodě):
+[docs/REFERENCE.md](docs/REFERENCE.md).
+
 ---
 
 ## Hned teď — pozorování baseline stability

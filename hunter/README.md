@@ -7,6 +7,10 @@ Implementace podle [docs/superpowers/specs/2026-08-27-hunter-design.md](../docs/
 nefungují). Sekce 11 prvního specu shrnuje, co bylo potřeba ověřit
 přímo na zařízení — k 2026-09-01 je vyřešená většina bodů.
 
+**Souhrnná referenční dokumentace** (architektura, kompletní seznam
+souborů/configu/příkazů, chování při chybách, obnova po nehodě):
+[docs/REFERENCE.md](../docs/REFERENCE.md).
+
 ## Co kam patří na SD kartě
 
 ```
