@@ -430,7 +430,11 @@ execute_command() {
 
         [Ww][Ii][Pp][Ee]" "[Cc][Oo][Nn][Ff][Ii][Rr][Mm])
             wipe_sent_snaps
-            CMD_REPLY="WIPE DONE ($WIPE_COUNT photos, $(get_space_gb) free)"
+            if [ "$WIPE_REMAINING" -gt 0 ]; then
+                CMD_REPLY="WIPE PARTIAL ($WIPE_COUNT photos, $WIPE_REMAINING zbyva, $(get_space_gb) free)"
+            else
+                CMD_REPLY="WIPE DONE ($WIPE_COUNT photos, $(get_space_gb) free)"
+            fi
             ;;
 
         [Ww][Ii][Pp][Ee])
@@ -585,8 +589,25 @@ execute_command() {
 # Po smazani se sent_list.txt prepise bez zaznamu o smazanych souborech
 # (atomicky), aby neblokovaly detekci pripadnych novych snimku se stejnym
 # nazvem po pretoceni casu.
+#
+# DAVKOVANI (2026-09-23): zatezovy test (tests/stress_5000.sh) namer il
+# 98.7 s na 5000 zaznamech - blizko RUN_DEADLINE (vychozich 180 s), a to
+# jen na PC. Prave kdyz je karta plna stareho odeslaneho obsahu - tedy
+# presne kdyz je WIPE potreba - je sent_list.txt nejvetsi a nejpomalejsi.
+# Zpracuje se proto nejvys WIPE_BATCH zaznamu za jedno spusteni; zbytek
+# zustane v sent_list.txt beze zmeny a ceka na dalsi WIPE CONFIRM.
+# WIPE_REMAINING rika volajicimu, kolik jich zbylo, aby mohl odpoved
+# rozlisit na WIPE DONE / WIPE PARTIAL (viz execute_command nize).
+# Zadne automaticke pokracovani na pozadi - CONFIRM zustava bezpecnostni
+# pojistkou, uzivatel prosty posle WIPE CONFIRM znovu.
 wipe_sent_snaps() {
     WIPE_COUNT=0
+    WIPE_REMAINING=0
+
+    _wipe_cap="${WIPE_BATCH:-500}"
+    case "$_wipe_cap" in
+        ''|*[!0-9]*|0*) _wipe_cap=500 ;;
+    esac
 
     if [ ! -f "$STATE_DIR/sent_list.txt" ]; then
         return 0
@@ -595,15 +616,21 @@ wipe_sent_snaps() {
     tmp="$STATE_DIR/sent_list.txt.tmp.$$"
     : > "$tmp"
 
+    _wipe_processed=0
     old_ifs="$IFS"
     IFS='
 '
     while IFS= read -r f; do
         case "$f" in
             "$SDCARD/snaps/"*.jpg)
-                if [ -f "$f" ]; then
-                    rm -f "$f"
-                    WIPE_COUNT=$((WIPE_COUNT + 1))
+                if [ "$_wipe_processed" -lt "$_wipe_cap" ]; then
+                    _wipe_processed=$((_wipe_processed + 1))
+                    if [ -f "$f" ]; then
+                        rm -f "$f"
+                        WIPE_COUNT=$((WIPE_COUNT + 1))
+                    fi
+                else
+                    printf '%s\n' "$f" >> "$tmp"
                 fi
                 ;;
             *)
@@ -616,4 +643,9 @@ wipe_sent_snaps() {
     sync
     mv -f "$tmp" "$STATE_DIR/sent_list.txt"
     sync
+
+    WIPE_REMAINING=$(grep -c . "$STATE_DIR/sent_list.txt" 2>/dev/null)
+    case "$WIPE_REMAINING" in
+        ''|*[!0-9]*) WIPE_REMAINING=0 ;;
+    esac
 }

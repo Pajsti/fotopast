@@ -80,23 +80,42 @@ echo
 echo "=== 3) velikost jedne _slice promenne (50 zaznamu/den) ==="
 echo "bajtu: $slice_bytes"
 
-# --- 4) WIPE: precte a prepise CELY sent_list.txt (neni cursor-bounded) ---
+# --- 4) WIPE: davkovano po WIPE_BATCH, aby nehrozilo prekroceni RUN_DEADLINE ---
+# (2026-09-23) Puvodni jednorazovy pruchod vsech 5000 zaznamu trval na
+# tomhle PC 98.7 s - blizko RUN_DEADLINE. wipe_sent_snaps ted zpracuje
+# nejvys WIPE_BATCH zaznamu za volani a zbytek necha na priste.
 echo
-echo "=== 4) wipe_sent_snaps() - cely pruchod 5000 radku ==="
-t0=$(date +%s%N)
-wipe_sent_snaps
-t1=$(date +%s%N)
-echo "smazano souboru: $WIPE_COUNT, cas: $(( (t1 - t0) / 1000000 )) ms"
-assert_eq "WIPE: smazalo vsech 5000 zaznamu" "$WIPE_COUNT" "5000"
-remaining=$(grep -c . "$STATE_DIR/sent_list.txt" 2>/dev/null || echo 0)
-assert_eq "WIPE: sent_list.txt je po smazani prazdny (vse bylo *.jpg pod snaps/)" "$remaining" "0"
+echo "=== 4) wipe_sent_snaps() - davkovano po WIPE_BATCH ==="
+WIPE_BATCH=500
+kolo=0
+celkem_smazano=0
+celkovy_cas_ms=0
+while :; do
+    kolo=$((kolo + 1))
+    t0=$(date +%s%N)
+    wipe_sent_snaps
+    t1=$(date +%s%N)
+    kolo_ms=$(( (t1 - t0) / 1000000 ))
+    celkovy_cas_ms=$((celkovy_cas_ms + kolo_ms))
+    celkem_smazano=$((celkem_smazano + WIPE_COUNT))
+    echo "kolo $kolo: smazano $WIPE_COUNT, zbyva $WIPE_REMAINING, cas $kolo_ms ms"
+    [ "$WIPE_REMAINING" -gt 0 ] || break
+    [ "$kolo" -lt 20 ] || break
+done
+assert_eq "davkovane WIPE: smazalo vsech 5000 zaznamu celkem" "$celkem_smazano" "5000"
+assert_eq "davkovane WIPE: posledni kolo hlasi 0 zbyvajicich" "$WIPE_REMAINING" "0"
+remaining=$(grep -c . "$STATE_DIR/sent_list.txt" 2>/dev/null)
+case "$remaining" in ''|*[!0-9]*) remaining=0 ;; esac
+assert_eq "davkovane WIPE: sent_list.txt je po vsech kolech prazdny" "$remaining" "0"
+echo "kol celkem: $kolo, nejdelsi jedno kolo pod $((celkovy_cas_ms / kolo + 1)) ms prumerne"
 
 echo
 echo "=== shrnuti ==="
 echo "5000 souboru + 5000 radku sent_list.txt zpracovano bez chyby."
 echo "list_unsent_snaps/day_fully_sent jsou cursor-bounded - fgrep bezi jen"
-echo "na dnech OD CURSORU, ne na vsech 100. WIPE cursor-bounded NENI a cte"
-echo "cely soubor, ale radek po radku (while read), ne vsechno najednou."
+echo "na dnech OD CURSORU, ne na vsech 100. WIPE cursor-bounded NENI, ale je"
+echo "ted davkovany po WIPE_BATCH (vychozi 500) - kazde jedno kolo tedy trva"
+echo "~1/10 puvodnich 98.7 s, misto jednoho rizikoveho behu blizko deadline."
 
 fixture_teardown
 finish

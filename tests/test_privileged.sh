@@ -15,6 +15,35 @@ fixture_snap 260828 210948
 CMD_REPLY=""; execute_command "WIPE CONFIRM" 1
 assert_contains "WIPE CONFIRM vykona" "$CMD_REPLY" "WIPE DONE"
 
+# --- WIPE_BATCH: pri prekroceni stropu se hlasi PARTIAL a zbytek ceka ---
+# (2026-09-23: zatezovy test namer il ~100 s na 5000 zaznamech, blizko
+# RUN_DEADLINE - viz tests/stress_5000.sh a komentar u wipe_sent_snaps)
+mkdir -p "$SDCARD/snaps/260829"
+: > "$STATE_DIR/sent_list.txt"
+i=0
+while [ "$i" -lt 5 ]; do
+    hh=$(printf '%06d' "$i")
+    path="$SDCARD/snaps/260829/${hh}_000_65535_P.jpg"
+    printf 'x' > "$path"
+    printf '%s\n' "$path" >> "$STATE_DIR/sent_list.txt"
+    i=$((i + 1))
+done
+WIPE_BATCH=2
+CMD_REPLY=""; execute_command "WIPE CONFIRM" 1
+assert_eq "WIPE_BATCH=2: smaze jen 2" "$WIPE_COUNT" "2"
+assert_eq "WIPE_BATCH=2: 3 zbyvaji" "$WIPE_REMAINING" "3"
+assert_contains "WIPE_BATCH=2: odpoved je PARTIAL" "$CMD_REPLY" "WIPE PARTIAL"
+assert_contains "WIPE_BATCH=2: odpoved hlasi pocet zbylych" "$CMD_REPLY" "3 zbyva"
+remaining_lines=$(grep -c . "$STATE_DIR/sent_list.txt")
+assert_eq "WIPE_BATCH=2: v sent_list.txt zustaly 3 radky" "$remaining_lines" "3"
+
+# --- druhe WIPE CONFIRM (strop zvednuty) dokonci zbytek ---
+WIPE_BATCH=500
+CMD_REPLY=""; execute_command "WIPE CONFIRM" 1
+assert_eq "druhe WIPE CONFIRM: smaze zbylych 3" "$WIPE_COUNT" "3"
+assert_eq "druhe WIPE CONFIRM: nic nezbyva" "$WIPE_REMAINING" "0"
+assert_contains "druhe WIPE CONFIRM: odpoved je DONE" "$CMD_REPLY" "WIPE DONE"
+
 # --- privilegovane prikazy vyzaduji token VZDY ---
 CMD_REPLY=""; execute_command "AUTH TYPE SENDER" 0
 assert_eq "AUTH TYPE bez tokenu" "$CMD_REPLY" "TOKEN REQUIRED"

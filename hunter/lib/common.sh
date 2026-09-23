@@ -451,6 +451,16 @@ load_config() {
     case "$MAX_QUEUE" in
         ''|*[!0-9]*|0?*) MAX_QUEUE=100 ;;
     esac
+    # Kolik zaznamu smaze WIPE CONFIRM za jedno spusteni (command.sh,
+    # wipe_sent_snaps) - viz komentar tamtez, proc davkovani vubec
+    # existuje. Stejna pojistka na spatny vstup jako u MAX_QUEUE vyse.
+    : "${WIPE_BATCH:=500}"
+    # Na rozdil od MAX_QUEUE tu osamocena "0" NENI "bez omezeni" - cely
+    # smysl davkovani je bezpecny strop, takze "0*" (vc. holeho "0")
+    # padne na vychozi hodnotu stejne jako preklep nebo prazdny vstup.
+    case "$WIPE_BATCH" in
+        ''|*[!0-9]*|0*) WIPE_BATCH=500 ;;
+    esac
     # Kudy odchazi fotky a odpovedi na prikazy. Prijem prikazu tim
     # dotcen NENI - ten jde pres IMAP vzdycky.
     #   smtp       jen mailem (vychozi, dosavadni chovani)
