@@ -9,7 +9,9 @@ přímo na zařízení — k 2026-09-01 je vyřešená většina bodů.
 
 **Souhrnná referenční dokumentace** (architektura, kompletní seznam
 souborů/configu/příkazů, chování při chybách, obnova po nehodě):
-[docs/REFERENCE.md](../docs/REFERENCE.md).
+[docs/REFERENCE.md](../docs/REFERENCE.md). **Návod k běžnému
+používání** (jak posílat příkazy, co dělá který, časté situace):
+[guide.md](../guide.md).
 
 ## Co kam patří na SD kartě
 
