@@ -57,6 +57,7 @@ fi
 STOPPED_APP=0
 APP_PID=""
 WATCHDOG_TIMER_PID=""
+MAIL_TIMER_PID=""
 
 # cleanup - MUSI probehnout za vsech okolnosti. Poradi je dulezite:
 # nejdriv odmrazit aplikaci, teprve pak uklidit stopWdg - watchdog nikdy
@@ -67,6 +68,9 @@ cleanup() {
     fi
     if [ -n "$WATCHDOG_TIMER_PID" ]; then
         kill "$WATCHDOG_TIMER_PID" 2>/dev/null
+    fi
+    if [ -n "$MAIL_TIMER_PID" ]; then
+        kill "$MAIL_TIMER_PID" 2>/dev/null
     fi
     rm -f /tmp/stopWdg
     release_lock
@@ -105,8 +109,11 @@ ensure_app_frozen() {
 # obejde uplne. Zustala by zmrazena ubia_first a zamek lezet na karte.
 # 2026-09-06 takhle skoncilo 18 behu za sebou.
 #
-# Timeouty uvnitr nastroju to nenahrazuji: tlsnet ma timeout na cteni
-# (30 s) a DNS (5 s), ale connect() a zapis omezene nejsou.
+# Timeouty uvnitr nastroju to nenahrazuji, i kdyz uz jsou uplne: tlsnet
+# ma timeout na cteni (30 s), DNS (5 s), connect (15 s) i zapis a
+# handshake (30 s od posledniho pokroku, doplneno 2026-09-23). Pojistka
+# tu zustava pro pripady, ktere zadny z nich nepokryva - zaseknuty AT
+# prikaz, chyba v samotnem nastroji, cokoli neocekavaneho.
 (
     sleep "$RUN_DEADLINE"
     deadline_kill_tools
@@ -122,8 +129,54 @@ log "=== hunter start (deadline ${RUN_DEADLINE}s) ==="
 wait_for_at_port
 sync_clock_from_modem
 
+# Kontrola posty dostane VLASTNI, mnohem mensi rozpocet nez cely beh.
+#
+# Proc: process_mail bezi PRED odesilanim fotek, takze zaseknuty mailrecv
+# neznamena "neprisly prikazy", ale "neodesle se nic". Rozbor 195 behu z
+# karty (2026-09-23) ukazal, ze prave tohle je nejcastejsi rezim selhani:
+# 121 ze 132 nedokoncenych behu umrelo jeste pred zmrazenim aplikace a 46
+# z nich presne na RUN_DEADLINE. Po studenem startu, kdy jeste nebezi 4G,
+# skonci mailrecv hned na DNS - a presne tehdy fotky chodily. Odtud
+# uzivatelovo "posle to az po restartu".
+#
+# Pojistka je zamerne v shellu, ne jen v C: musi fungovat bez ohledu na
+# to, PROC mailrecv visi. (Konkretni pricinu v tlsnet.c - nekonecne
+# opakovani na WANT_WRITE - resi samostatna oprava, ale i po ni zustava
+# tohle jako posledni zachrana.)
+#
+# Zabiji se opakovane ve smycce, protoze process_mail vola mailrecv
+# vickrat (list unseen, seen, odpovedi) - jedno zabiti by utlo jen prave
+# bezici volani a dalsi by viselo znovu.
+mail_watchdog_start() {
+    (
+        sleep "$MAIL_DEADLINE"
+        log "kontrola posty prekrocila rozpocet ${MAIL_DEADLINE}s - ukoncuji mailrecv"
+        while :; do
+            _mp=$(pidof mailrecv 2>/dev/null)
+            # Zamerne bez uvozovek: pidof vraci PID oddelene mezerou a
+            # chceme signal vsem. Stejny postup jako deadline_kill_tools.
+            [ -n "$_mp" ] && kill -TERM $_mp 2>/dev/null
+            sleep 2
+        done
+    ) &
+    MAIL_TIMER_PID=$!
+}
+
+# Zastavit HNED po process_mail: od teto chvile smi mailrecv bezet znovu
+# jako odesilaci cesta (SEND_TRANSPORT=imap pouziva mailrecv append) a
+# timer by mu do toho strilel.
+mail_watchdog_stop() {
+    if [ -n "$MAIL_TIMER_PID" ]; then
+        kill "$MAIL_TIMER_PID" 2>/dev/null
+        MAIL_TIMER_PID=""
+    fi
+}
+
 process_sms
+
+mail_watchdog_start
 process_mail
+mail_watchdog_stop
 
 snap_list=$(wait_for_candidates)
 

@@ -13,6 +13,7 @@
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <time.h>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -54,9 +55,33 @@ void tlsnet_die(int code, const char *msg)
 
 /* ------------------------------------------------------------------- I/O */
 
+/* Straz proti NEKONECNEMU opakovani na WANT_READ/WANT_WRITE.
+ *
+ * mbedtls_net_send prelozi EAGAIN (tedy vyprseni SO_SNDTIMEO na
+ * blokujicim socketu) na MBEDTLS_ERR_SSL_WANT_WRITE. Puvodni kod na to
+ * delal holy `continue`, takze pri zaseklem ZAPISU - protistrana spojeni
+ * nezavre, jen prestane odebirat data, coz je na mobilni siti bezne -
+ * smycka nikdy neskoncila a proces bezel, dokud ho nekdo nezabil.
+ *
+ * Na karte to 2026-09-23 vypadalo takhle: kontrola posty (process_mail
+ * bezi PRED odesilanim) sezrala cely RUN_DEADLINE a fotky se neodeslaly
+ * vubec. Ze 195 behu jich 46 skoncilo presne na deadline a 121 ze 132
+ * nedokoncenych se nedostalo ani ke zmrazeni aplikace. Po studenem
+ * startu, kdy jeste nebezi 4G, skoncil mailrecv hned na DNS - a presne
+ * tehdy fotky chodily.
+ *
+ * Rozpocet se pocita od posledniho POKROKU, ne od zacatku volani: dlouhy
+ * prenos nesmi vyprset jen proto, ze je dlouhy.
+ */
+static int stalled_too_long(time_t since)
+{
+    return (long)(time(NULL) - since) >= (IO_TIMEOUT_MS / 1000);
+}
+
 void tlsnet_write(const char *buf, size_t len)
 {
     size_t off = 0;
+    time_t last_progress = time(NULL);
 
     while (off < len) {
         int ret;
@@ -64,15 +89,23 @@ void tlsnet_write(const char *buf, size_t len)
             ret = mbedtls_ssl_write(&ssl_ctx, (const unsigned char *)buf + off,
                                     len - off);
             if (ret == MBEDTLS_ERR_SSL_WANT_READ ||
-                ret == MBEDTLS_ERR_SSL_WANT_WRITE)
+                ret == MBEDTLS_ERR_SSL_WANT_WRITE) {
+                if (stalled_too_long(last_progress))
+                    tlsnet_die(2, "zapis do socketu: timeout");
                 continue;
+            }
         } else {
             ret = mbedtls_net_send(&net_ctx, (const unsigned char *)buf + off,
                                    len - off);
-            if (ret == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
+            if (ret == MBEDTLS_ERR_SSL_WANT_WRITE) {
+                if (stalled_too_long(last_progress))
+                    tlsnet_die(2, "zapis do socketu: timeout");
+                continue;
+            }
         }
         if (ret <= 0) tlsnet_die(2, "zapis do socketu selhal");
         off += (size_t)ret;
+        last_progress = time(NULL);
     }
 }
 
@@ -81,8 +114,16 @@ int tlsnet_read(char *buf, size_t buflen)
     int n;
 
     if (use_tls) {
+        /* Cteni ma timeout uz pres mbedtls_ssl_conf_read_timeout (vraci
+         * MBEDTLS_ERR_SSL_TIMEOUT, tedy ze smycky vypadne). Straz je tu
+         * jako pojistka pro pripad, ze by se BIO zachovalo jinak - stejna
+         * trida chyby jako u zapisu vyse a stat se to smi jen jednou. */
+        time_t start = time(NULL);
         do {
             n = mbedtls_ssl_read(&ssl_ctx, (unsigned char *)buf, buflen - 1);
+            if ((n == MBEDTLS_ERR_SSL_WANT_READ ||
+                 n == MBEDTLS_ERR_SSL_WANT_WRITE) && stalled_too_long(start))
+                tlsnet_die(2, "cteni ze socketu: timeout");
         } while (n == MBEDTLS_ERR_SSL_WANT_READ ||
                  n == MBEDTLS_ERR_SSL_WANT_WRITE);
     } else {
@@ -389,6 +430,7 @@ void tlsnet_connect(const char *host, const char *port)
 void tlsnet_handshake(const char *host, const char *cafile)
 {
     int ret;
+    time_t hs_start;
 
     if (mbedtls_ssl_config_defaults(&ssl_conf, MBEDTLS_SSL_IS_CLIENT,
                                     MBEDTLS_SSL_TRANSPORT_STREAM,
@@ -420,6 +462,10 @@ void tlsnet_handshake(const char *host, const char *cafile)
     mbedtls_ssl_set_bio(&ssl_ctx, &net_ctx, mbedtls_net_send, NULL,
                         mbedtls_net_recv_timeout);
 
+    /* Stejna past jako u tlsnet_write vyse: handshake vraci WANT_WRITE,
+     * kdyz se zasekne zapis, a tahle smycka na to donekonecna zkousela
+     * znovu. Rozpocet je na cely handshake, ne na jedno kolo. */
+    hs_start = time(NULL);
     while ((ret = mbedtls_ssl_handshake(&ssl_ctx)) != 0) {
         if (ret != MBEDTLS_ERR_SSL_WANT_READ &&
             ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
@@ -429,6 +475,8 @@ void tlsnet_handshake(const char *host, const char *cafile)
                      err, (unsigned)-ret);
             tlsnet_die(2, errmsg);
         }
+        if (stalled_too_long(hs_start))
+            tlsnet_die(2, "TLS handshake: timeout");
     }
     use_tls = 1;
     if (verbose)

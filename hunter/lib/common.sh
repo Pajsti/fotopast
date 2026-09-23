@@ -433,6 +433,19 @@ load_config() {
     : "${SNAP_WAIT:=25}"
     : "${MAX_SEND_PER_WAKE:=3}"
     : "${RUN_DEADLINE:=180}"
+    # Vlastni rozpocet pro kontrolu posty. Bez nej muze zaseknuty
+    # mailrecv sezrat cely RUN_DEADLINE a na odesilani fotek uz nedojde -
+    # process_mail bezi PRED nim (viz hunter.sh). Rozbor 195 behu z karty
+    # 2026-09-23: 121 ze 132 nedokoncenych behu umrelo jeste pred
+    # zmrazenim aplikace, 46 z nich presne na RUN_DEADLINE.
+    : "${MAIL_DEADLINE:=45}"
+    case "$MAIL_DEADLINE" in
+        ''|*[!0-9]*|0*) MAIL_DEADLINE=45 ;;
+    esac
+    # Rozpocet vetsi nez cely beh by pojistku zrusil - pak by zaseknuta
+    # posta zase drzela beh az do RUN_DEADLINE, presne jak to delala
+    # predtim.
+    [ "$MAIL_DEADLINE" -ge "$RUN_DEADLINE" ] && MAIL_DEADLINE=$((RUN_DEADLINE / 4))
     : "${AUTH_TYPE:=TOKEN}"
     : "${MAIL_MASTERS:=}"
     : "${REQUEST_MAX:=5}"
